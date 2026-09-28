@@ -59,7 +59,10 @@ export function useWorkday(): PersistedWorkday {
 }
 
 export function writeWorkday(next: PersistedWorkday): void {
-  snapshot = next;
+  // Persist before publishing so a failed write (quota, blocked storage)
+  // leaves the snapshot consistent with what is actually stored. The error
+  // propagates to the caller, which can surface it.
   saveWorkday(next.dateKey, next.events);
+  snapshot = next;
   emitChange();
 }

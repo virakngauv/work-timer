@@ -35,8 +35,16 @@ export function localDateKey(timestamp = Date.now()): string {
 
 export function loadWorkday(): PersistedWorkday {
   const today = localDateKey();
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return { dateKey: today, events: [] };
+  const empty: PersistedWorkday = { dateKey: today, events: [] };
+
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    // Storage can be denied by browser settings; fall back to an empty day.
+    return empty;
+  }
+  if (!raw) return empty;
 
   try {
     const parsed = JSON.parse(raw) as Partial<StoredPayload>;
@@ -46,16 +54,16 @@ export function loadWorkday(): PersistedWorkday {
       !Array.isArray(parsed.events) ||
       !parsed.events.every(isTimerEvent)
     ) {
-      return { dateKey: today, events: [] };
+      return empty;
     }
 
     if (parsed.dateKey !== today && currentState(parsed.events) === "stopped") {
-      return { dateKey: today, events: [] };
+      return empty;
     }
 
     return { dateKey: parsed.dateKey, events: parsed.events };
   } catch {
-    return { dateKey: today, events: [] };
+    return empty;
   }
 }
 

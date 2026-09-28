@@ -25,7 +25,7 @@
   - Playwright e2e matrix on Chromium, Firefox, and WebKit (`.github/workflows/ci.yml`)
   - Linked-issue validation for pull requests (`.github/workflows/check-linked-issue.yml`)
   - CodeQL for JavaScript/TypeScript (`.github/workflows/codeql.yml`)
-- Weekly Dependabot updates for GitHub Actions and npm dependencies (`.github/dependabot.yml`)
+- Weekly Dependabot updates for GitHub Actions (`.github/dependabot.yml`; app dependencies update through pnpm, which Dependabot's npm ecosystem does not yet support at v12)
 - All actions pinned to verified commit SHAs
 
 ## First local setup

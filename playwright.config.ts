@@ -6,6 +6,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  globalTimeout: 5 * 60_000,
   reporter: [["html", { open: "never" }]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
@@ -19,7 +20,11 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: "pnpm dev:e2e",
+        // Run the Next.js server directly so Playwright can kill it on
+        // teardown; wrapping it in pnpm leaves an orphaned server behind
+        // and hangs the run after tests finish.
+        command:
+          "node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3100",
         url: "http://127.0.0.1:3100",
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
