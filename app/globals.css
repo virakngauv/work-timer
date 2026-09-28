@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #f4f8f5;
+  --foreground: #102019;
+  --muted: #66736c;
+  --panel: #ffffff;
+  --border: #dbe5df;
+  --work: #179447;
+  --work-soft: #eaf8ee;
+  --break: #2f718f;
+  --break-soft: #eaf5f9;
+  --danger: #d34444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 100% 0%, #e5f5ea 0, transparent 28rem),
+    radial-gradient(circle at 0% 100%, #e7f2f6 0, transparent 28rem),
+    var(--background);
+  color: var(--foreground);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(23, 148, 71, 0.3);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
