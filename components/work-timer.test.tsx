@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { WorkTimer } from "@/components/work-timer";
@@ -78,5 +78,26 @@ describe("WorkTimer", () => {
     expect(
       screen.getByRole("button", { name: "Switch to Break" }),
     ).toBeInTheDocument();
+  });
+
+  it("surfaces a storage failure instead of losing the action silently", async () => {
+    const user = userEvent.setup();
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("QuotaExceededError");
+      });
+
+    render(<WorkTimer />);
+    expect(screen.getByText("STOPPED")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Start Day" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not save to browser storage. The change was not applied.",
+    );
+    expect(screen.getByText("STOPPED")).toBeInTheDocument();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    setItemSpy.mockRestore();
   });
 });

@@ -9,6 +9,7 @@ import {
   currentState,
   editEventTimestamp,
   formatDuration,
+  type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
 import { localDateKey } from "@/lib/storage";
@@ -58,6 +59,7 @@ export function WorkTimer() {
   const events = workday.events;
   const dayKey = workday.dateKey;
   const [now, setNow] = useState(() => Date.now());
+  const [actionError, setActionError] = useState<string | null>(null);
   // The server snapshot has an empty dateKey until the client store attaches.
   const hydrated = dayKey !== "";
 
@@ -69,13 +71,27 @@ export function WorkTimer() {
   const totals = useMemo(() => calculateTotals(events, now), [events, now]);
   const state = currentState(events);
 
+  function persistEvents(nextEvents: TimerEvent[], dateKey = dayKey): boolean {
+    try {
+      writeWorkday({ dateKey, events: nextEvents });
+      setActionError(null);
+      return true;
+    } catch {
+      // Nothing was published, so the UI still shows the stored state.
+      setActionError(
+        "Could not save to browser storage. The change was not applied.",
+      );
+      return false;
+    }
+  }
+
   function transition(next: TimerState) {
     const timestamp = Date.now();
+    const persisted = persistEvents(
+      appendTransition(events, next, timestamp, createId()),
+    );
+    if (!persisted) return;
     setNow(timestamp);
-    writeWorkday({
-      dateKey: dayKey,
-      events: appendTransition(events, next, timestamp, createId()),
-    });
   }
 
   function startDay() {
@@ -83,11 +99,12 @@ export function WorkTimer() {
     const today = localDateKey(timestamp);
 
     if (dayKey !== today) {
+      const persisted = persistEvents(
+        appendTransition([], "work", timestamp, createId()),
+        today,
+      );
+      if (!persisted) return;
       setNow(timestamp);
-      writeWorkday({
-        dateKey: today,
-        events: appendTransition([], "work", timestamp, createId()),
-      });
       return;
     }
 
@@ -214,6 +231,12 @@ export function WorkTimer() {
           Every mode switch creates one timestamped state transition and starts
           a fresh current session.
         </p>
+
+        {actionError ? (
+          <p role="alert" className="mt-2 text-sm font-medium text-red-600">
+            {actionError}
+          </p>
+        ) : null}
       </section>
 
       <div className="mt-6">
