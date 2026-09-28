@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   deriveSegments,
   formatClockTime,
@@ -92,11 +92,8 @@ export function SessionTable({
             </thead>
             <tbody>
               {segments.map((segment) => (
-                <>
-                  <tr
-                    key={segment.eventId}
-                    className="border-t border-slate-100 text-sm text-slate-800"
-                  >
+                <Fragment key={segment.eventId}>
+                  <tr className="border-t border-slate-100 text-sm text-slate-800">
                     <td className="px-5 py-4 sm:px-7">
                       <span
                         className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-semibold ${
@@ -145,7 +142,8 @@ export function SessionTable({
                         <div className="flex flex-col gap-4">
                           <div>
                             <div className="font-semibold text-slate-900">
-                              Adjust {segment.state === "work" ? "work" : "break"} start
+                              Adjust{" "}
+                              {segment.state === "work" ? "work" : "break"} start
                             </div>
                             <p className="mt-1 text-sm text-slate-500">
                               Changing this boundary also changes the end of the
@@ -182,7 +180,10 @@ export function SessionTable({
                           </label>
 
                           {error ? (
-                            <p role="alert" className="text-sm font-medium text-red-600">
+                            <p
+                              role="alert"
+                              className="text-sm font-medium text-red-600"
+                            >
                               {error}
                             </p>
                           ) : null}
@@ -205,7 +206,7 @@ export function SessionTable({
                       </td>
                     </tr>
                   ) : null}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -12,7 +12,11 @@ import {
   type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
-import { loadEvents, saveEvents } from "@/lib/storage";
+import {
+  loadWorkday,
+  localDateKey,
+  saveWorkday,
+} from "@/lib/storage";
 
 function createId(): string {
   return globalThis.crypto?.randomUUID?.() ??
@@ -55,18 +59,21 @@ function MetricCard({
 
 export function WorkTimer() {
   const [events, setEvents] = useState<TimerEvent[]>([]);
+  const [dayKey, setDayKey] = useState(() => localDateKey());
   const [now, setNow] = useState(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setEvents(loadEvents());
+    const workday = loadWorkday();
+    setDayKey(workday.dateKey);
+    setEvents(workday.events);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    saveEvents(events);
-  }, [events, hydrated]);
+    saveWorkday(dayKey, events);
+  }, [dayKey, events, hydrated]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250);
@@ -85,6 +92,16 @@ export function WorkTimer() {
   }
 
   function startDay() {
+    const timestamp = Date.now();
+    const today = localDateKey(timestamp);
+
+    if (dayKey !== today) {
+      setDayKey(today);
+      setNow(timestamp);
+      setEvents(appendTransition([], "work", timestamp, createId()));
+      return;
+    }
+
     transition("work");
   }
 
@@ -101,7 +118,8 @@ export function WorkTimer() {
     if (timestamp > Date.now()) return "A session cannot start in the future.";
 
     try {
-      setEvents((current) => editEventTimestamp(current, eventId, timestamp));
+      const corrected = editEventTimestamp(events, eventId, timestamp);
+      setEvents(corrected);
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : "Could not update time.";

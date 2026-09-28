@@ -56,7 +56,14 @@ Transition events store that boundary once. Interval rows are still the right pr
       state: TimerState;
     }
 
-The local MVP stores one ordered event array.
+The local MVP stores one ordered event array plus a local-calendar `dateKey` identifying the workday.
+
+## Workday rollover
+
+- Starting on a date creates that date's workday.
+- Stopping does not erase the day's history; the user can resume later the same day.
+- If the stored workday is stopped and the calendar date has advanced, loading the app begins with a fresh empty day.
+- If a session is still active across midnight, the active workday is preserved until the user stops it. A future cloud-backed version can add a more sophisticated rollover policy if needed.
 
 ## Invariants
 
@@ -105,6 +112,7 @@ Browser localStorage:
 
     {
       "version": 1,
+      "dateKey": "YYYY-MM-DD",
       "events": [...]
     }
 

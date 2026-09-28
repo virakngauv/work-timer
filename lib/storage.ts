@@ -1,10 +1,14 @@
-import type { TimerEvent } from "@/lib/timer";
+import { currentState, type TimerEvent } from "@/lib/timer";
 
 const STORAGE_KEY = "work-timer:v1";
 
-interface PersistedTimer {
-  version: 1;
+export interface PersistedWorkday {
+  dateKey: string;
   events: TimerEvent[];
+}
+
+interface StoredPayload extends PersistedWorkday {
+  version: 1;
 }
 
 function isTimerEvent(value: unknown): value is TimerEvent {
@@ -21,27 +25,47 @@ function isTimerEvent(value: unknown): value is TimerEvent {
   );
 }
 
-export function loadEvents(): TimerEvent[] {
+export function localDateKey(timestamp = Date.now()): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function loadWorkday(): PersistedWorkday {
+  const today = localDateKey();
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
+  if (!raw) return { dateKey: today, events: [] };
 
   try {
-    const parsed = JSON.parse(raw) as Partial<PersistedTimer>;
+    const parsed = JSON.parse(raw) as Partial<StoredPayload>;
     if (
       parsed.version !== 1 ||
+      typeof parsed.dateKey !== "string" ||
       !Array.isArray(parsed.events) ||
       !parsed.events.every(isTimerEvent)
     ) {
-      return [];
+      return { dateKey: today, events: [] };
     }
 
-    return parsed.events;
+    if (
+      parsed.dateKey !== today &&
+      currentState(parsed.events) === "stopped"
+    ) {
+      return { dateKey: today, events: [] };
+    }
+
+    return { dateKey: parsed.dateKey, events: parsed.events };
   } catch {
-    return [];
+    return { dateKey: today, events: [] };
   }
 }
 
-export function saveEvents(events: TimerEvent[]): void {
-  const payload: PersistedTimer = { version: 1, events };
+export function saveWorkday(
+  dateKey: string,
+  events: TimerEvent[],
+): void {
+  const payload: StoredPayload = { version: 1, dateKey, events };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
