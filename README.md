@@ -46,7 +46,7 @@ Install dependencies:
     corepack enable
     pnpm install
 
-Then commit the generated `pnpm-lock.yaml`. This repository intentionally does not contain a fabricated lockfile; the first real install should generate it from the selected package versions.
+The committed `pnpm-lock.yaml` pins the exact dependency set, and CI installs with `--frozen-lockfile`. Regenerate it only through a real `pnpm install`; never hand-edit it.
 
 Start the app:
 
@@ -76,4 +76,4 @@ The MVP stores a single workday event stream in browser localStorage. Clearing s
 
 ## Repository setup status
 
-The code, documentation, tests, and project configuration are scaffolded. A lockfile and CI should be finalized after the first dependency install. See [docs/setup-status.md](docs/setup-status.md).
+The code, documentation, tests, and project configuration are scaffolded. The lockfile is committed and CI runs quality checks, the production build, Playwright e2e on all three engines, CodeQL, and linked-issue validation. See [docs/setup-status.md](docs/setup-status.md).

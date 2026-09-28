@@ -9,18 +9,16 @@ import {
   currentState,
   editEventTimestamp,
   formatDuration,
-  type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
-import {
-  loadWorkday,
-  localDateKey,
-  saveWorkday,
-} from "@/lib/storage";
+import { localDateKey } from "@/lib/storage";
+import { useWorkday, writeWorkday } from "@/lib/workday-store";
 
 function createId(): string {
-  return globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 function MetricCard({
@@ -40,9 +38,7 @@ function MetricCard({
     work: active
       ? "border-emerald-300 bg-emerald-50"
       : "border-slate-200 bg-white",
-    break: active
-      ? "border-sky-300 bg-sky-50"
-      : "border-slate-200 bg-white",
+    break: active ? "border-sky-300 bg-sky-50" : "border-slate-200 bg-white",
     neutral: "border-slate-200 bg-white",
   };
 
@@ -58,22 +54,12 @@ function MetricCard({
 }
 
 export function WorkTimer() {
-  const [events, setEvents] = useState<TimerEvent[]>([]);
-  const [dayKey, setDayKey] = useState(() => localDateKey());
+  const workday = useWorkday();
+  const events = workday.events;
+  const dayKey = workday.dateKey;
   const [now, setNow] = useState(() => Date.now());
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    const workday = loadWorkday();
-    setDayKey(workday.dateKey);
-    setEvents(workday.events);
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveWorkday(dayKey, events);
-  }, [dayKey, events, hydrated]);
+  // The server snapshot has an empty dateKey until the client store attaches.
+  const hydrated = dayKey !== "";
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250);
@@ -86,9 +72,10 @@ export function WorkTimer() {
   function transition(next: TimerState) {
     const timestamp = Date.now();
     setNow(timestamp);
-    setEvents((current) =>
-      appendTransition(current, next, timestamp, createId()),
-    );
+    writeWorkday({
+      dateKey: dayKey,
+      events: appendTransition(events, next, timestamp, createId()),
+    });
   }
 
   function startDay() {
@@ -96,9 +83,11 @@ export function WorkTimer() {
     const today = localDateKey(timestamp);
 
     if (dayKey !== today) {
-      setDayKey(today);
       setNow(timestamp);
-      setEvents(appendTransition([], "work", timestamp, createId()));
+      writeWorkday({
+        dateKey: today,
+        events: appendTransition([], "work", timestamp, createId()),
+      });
       return;
     }
 
@@ -118,16 +107,17 @@ export function WorkTimer() {
     if (timestamp > Date.now()) return "A session cannot start in the future.";
 
     try {
-      const corrected = editEventTimestamp(events, eventId, timestamp);
-      setEvents(corrected);
+      writeWorkday({
+        dateKey: dayKey,
+        events: editEventTimestamp(events, eventId, timestamp),
+      });
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : "Could not update time.";
     }
   }
 
-  const currentLabel =
-    state === "break" ? "Current Break" : "Current Session";
+  const currentLabel = state === "break" ? "Current Break" : "Current Session";
   const currentDescription =
     state === "stopped" ? "No active session" : "Time since last switch";
 

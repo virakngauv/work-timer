@@ -17,13 +17,13 @@ Example:
 
 Derived intervals:
 
-| Mode | Started | Ended |
-| --- | --- | --- |
-| Work | 09:02 | 10:11 |
-| Break | 10:11 | 10:23 |
-| Work | 10:23 | 12:06 |
-| Break | 12:06 | 12:41 |
-| Work | 12:41 | 17:18 |
+| Mode  | Started | Ended |
+| ----- | ------- | ----- |
+| Work  | 09:02   | 10:11 |
+| Break | 10:11   | 10:23 |
+| Work  | 10:23   | 12:06 |
+| Break | 12:06   | 12:41 |
+| Work  | 12:41   | 17:18 |
 
 For event i:
 

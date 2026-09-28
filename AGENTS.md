@@ -64,4 +64,14 @@ Events must remain strictly chronological. Editing a boundary must preserve that
 
 Every pull request must link a real tracking issue with a closing reference such as `Closes #123`. Do not merge while required checks are failing or pending.
 
-The repository still needs a generated and committed `pnpm-lock.yaml` before frozen-lockfile CI is enabled. Do not add a fake lockfile or silently weaken CI to compensate.
+The committed `pnpm-lock.yaml` is generated from a real install and CI installs with `--frozen-lockfile`. Never hand-edit the lockfile or silently weaken CI to compensate.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

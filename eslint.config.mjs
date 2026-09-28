@@ -1,7 +1,7 @@
 import { globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 
-export default [
+const eslintConfig = [
   ...nextVitals,
   globalIgnores([
     ".next/**",
@@ -11,3 +11,5 @@ export default [
     "test-results/**",
   ]),
 ];
+
+export default eslintConfig;

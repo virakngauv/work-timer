@@ -1,6 +1,6 @@
 import { currentState, type TimerEvent } from "@/lib/timer";
 
-const STORAGE_KEY = "work-timer:v1";
+export const STORAGE_KEY = "work-timer:v1";
 
 export interface PersistedWorkday {
   dateKey: string;
@@ -49,10 +49,7 @@ export function loadWorkday(): PersistedWorkday {
       return { dateKey: today, events: [] };
     }
 
-    if (
-      parsed.dateKey !== today &&
-      currentState(parsed.events) === "stopped"
-    ) {
+    if (parsed.dateKey !== today && currentState(parsed.events) === "stopped") {
       return { dateKey: today, events: [] };
     }
 
@@ -62,10 +59,7 @@ export function loadWorkday(): PersistedWorkday {
   }
 }
 
-export function saveWorkday(
-  dateKey: string,
-  events: TimerEvent[],
-): void {
+export function saveWorkday(dateKey: string, events: TimerEvent[]): void {
   const payload: StoredPayload = { version: 1, dateKey, events };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }

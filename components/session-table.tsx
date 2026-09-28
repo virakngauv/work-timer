@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import {
   deriveSegments,
   formatClockTime,
@@ -25,13 +25,18 @@ export function SessionTable({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const segments = deriveSegments(events, now);
 
-  useEffect(() => {
-    if (!editingId) return;
-    const event = events.find((item) => item.id === editingId);
-    if (event) setDraft(toLocalDateTimeInput(event.at));
-  }, [editingId, events]);
+  // Adjust state during render (instead of in an effect) so an open editor
+  // follows boundary corrections made outside of it.
+  const editingEvent = editingId
+    ? events.find((item) => item.id === editingId)
+    : undefined;
+  if (editingEvent && editingEvent.at !== syncedAt) {
+    setSyncedAt(editingEvent.at);
+    setDraft(toLocalDateTimeInput(editingEvent.at));
+  }
 
   function openEditor(eventId: string) {
     const event = events.find((item) => item.id === eventId);
@@ -68,7 +73,9 @@ export function SessionTable({
   return (
     <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4 sm:px-7">
-        <h2 className="text-lg font-bold text-slate-950">Today&apos;s Sessions</h2>
+        <h2 className="text-lg font-bold text-slate-950">
+          Today&apos;s Sessions
+        </h2>
         <p className="mt-1 text-sm text-slate-500">
           Edit a start boundary to correct a forgotten mode switch.
         </p>
@@ -143,7 +150,8 @@ export function SessionTable({
                           <div>
                             <div className="font-semibold text-slate-900">
                               Adjust{" "}
-                              {segment.state === "work" ? "work" : "break"} start
+                              {segment.state === "work" ? "work" : "break"}{" "}
+                              start
                             </div>
                             <p className="mt-1 text-sm text-slate-500">
                               Changing this boundary also changes the end of the

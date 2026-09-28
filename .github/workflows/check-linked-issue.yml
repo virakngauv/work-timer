@@ -1,0 +1,63 @@
+name: Check linked issue
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  issues: read
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate closing issue reference
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that the PR closes an open issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          body=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" --jq .body)
+
+          issue_numbers=$(
+            printf '%s' "$body" \
+              | grep -iEo '\b(close[sd]?|fix(es|ed)?|resolve[sd]?)[: ]*#[0-9]+' \
+              | grep -oE '[0-9]+' \
+              | sort -u \
+              || true
+          )
+
+          if [ -z "$issue_numbers" ]; then
+            echo "No closing reference (for example 'Closes #123') found in the PR body." >&2
+            exit 1
+          fi
+
+          ok=0
+          for number in $issue_numbers; do
+            is_pull_request=$(
+              gh api "repos/${GH_REPO}/issues/${number}" --jq '.pull_request // empty'
+            )
+            state=$(gh api "repos/${GH_REPO}/issues/${number}" --jq .state)
+
+            if [ -n "$is_pull_request" ]; then
+              echo "#${number} is a pull request, not an issue." >&2
+              continue
+            fi
+
+            if [ "$state" != "open" ]; then
+              echo "#${number} is ${state}, not open." >&2
+              continue
+            fi
+
+            echo "#${number} is an open issue referenced with a closing keyword."
+            ok=1
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "Every pull request must link a real, open tracking issue with a closing reference." >&2
+            exit 1
+          fi

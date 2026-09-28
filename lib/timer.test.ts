@@ -18,8 +18,18 @@ describe("timer domain", () => {
 
     expect(deriveSegments(events, 200_000)).toMatchObject([
       { state: "work", startedAt: 0, endedAt: 60_000, durationMs: 60_000 },
-      { state: "break", startedAt: 60_000, endedAt: 90_000, durationMs: 30_000 },
-      { state: "work", startedAt: 90_000, endedAt: 150_000, durationMs: 60_000 },
+      {
+        state: "break",
+        startedAt: 60_000,
+        endedAt: 90_000,
+        durationMs: 30_000,
+      },
+      {
+        state: "work",
+        startedAt: 90_000,
+        endedAt: 150_000,
+        durationMs: 60_000,
+      },
     ]);
 
     expect(calculateTotals(events, 200_000)).toEqual({

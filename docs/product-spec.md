@@ -65,19 +65,19 @@ Example:
 
 The history initially displays:
 
-| Mode | Started | Ended | Duration |
-| --- | --- | --- | --- |
-| Break | 10:00 | 10:25 | 25m |
-| Work | 10:25 | Now | ... |
+| Mode  | Started | Ended | Duration |
+| ----- | ------- | ----- | -------- |
+| Break | 10:00   | 10:25 | 25m      |
+| Work  | 10:25   | Now   | ...      |
 
 The user edits the Work start boundary from 10:25 to 10:20.
 
 The result becomes:
 
-| Mode | Started | Ended | Duration |
-| --- | --- | --- | --- |
-| Break | 10:00 | 10:20 | 20m |
-| Work | 10:20 | Now | ... |
+| Mode  | Started | Ended | Duration |
+| ----- | ------- | ----- | -------- |
+| Break | 10:00   | 10:20 | 20m      |
+| Work  | 10:20   | Now   | ...      |
 
 Only one underlying timestamp changes. The totals recompute automatically.
 

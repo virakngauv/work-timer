@@ -16,33 +16,26 @@
 - Repository-specific AGENTS.md
 - Environment example
 
-## Required first local setup
+## Completed after the first local install (issue #1)
 
-Run:
+- Generated `pnpm-lock.yaml` from a real dependency resolution (Node 24.21.0, pnpm 12.6.0 via corepack)
+- Local verification: `pnpm check` (format, lint, typecheck, Vitest, production build) and `pnpm test:e2e`
+- GitHub Actions workflows:
+  - Quality and build with `pnpm install --frozen-lockfile` (`.github/workflows/ci.yml`)
+  - Playwright e2e matrix on Chromium, Firefox, and WebKit (`.github/workflows/ci.yml`)
+  - Linked-issue validation for pull requests (`.github/workflows/check-linked-issue.yml`)
+  - CodeQL for JavaScript/TypeScript (`.github/workflows/codeql.yml`)
+- Weekly Dependabot updates for GitHub Actions and npm dependencies (`.github/dependabot.yml`)
+- All actions pinned to verified commit SHAs
+
+## First local setup
 
     corepack enable
     pnpm install
-
-Then commit the generated `pnpm-lock.yaml`.
-
-The lockfile is intentionally not hand-written. It should reflect a real dependency resolution.
-
-After that, run:
-
-    pnpm check
     pnpm exec playwright install
-    pnpm test:e2e
 
-## CI follow-up
+Then run `pnpm check` and `pnpm test:e2e`.
 
-Do not enable a frozen-lockfile CI workflow until the real lockfile exists. Once it is committed, add GitHub Actions jobs for:
+## Repository settings (not checked in)
 
-- linked issue validation
-- formatting / lint / typecheck / Vitest / production build
-- Playwright on Chromium, Firefox, and WebKit
-- CodeQL for JavaScript/TypeScript
-- weekly Dependabot updates
-
-Pin third-party actions to verified commit SHAs. Require passing checks before merge.
-
-Repository settings such as branch protection/rulesets and remote secrets should be configured explicitly rather than assumed from checked-in files.
+Branch protection, rulesets, required checks, and remote secrets must be configured explicitly in GitHub settings; checked-in workflow files alone do not enforce them. Require the CI, E2E, CodeQL, and Check linked issue jobs to pass before merge.
