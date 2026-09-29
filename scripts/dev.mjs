@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import net from "node:net";
 import os from "node:os";
+import { findAvailablePort } from "./port-probe.mjs";
 
 const lan = process.env.DEV_LAN === "true";
 const host = lan ? "0.0.0.0" : "127.0.0.1";
@@ -23,23 +23,13 @@ if (
 // error below reports this exact range.
 const lastProbedPort = Math.min(requestedPort + 9, 65535);
 
-function isPortFree(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.once("listening", () => server.close(() => resolve(true)));
-    server.listen(port, host);
-  });
+let port;
+try {
+  port = await findAvailablePort(requestedPort, lastProbedPort, host);
+} catch (error) {
+  console.error(`Could not check port availability: ${error.message}`);
+  process.exit(1);
 }
-
-async function findAvailablePort() {
-  for (let port = requestedPort; port <= lastProbedPort; port += 1) {
-    if (await isPortFree(port)) return port;
-  }
-  return null;
-}
-
-const port = await findAvailablePort();
 
 if (!port) {
   console.error(
