@@ -18,7 +18,11 @@ if (
 }
 
 // Next.js 16 no longer falls back to another port when the requested one is
-// taken, so probe upward from the requested port before spawning.
+// taken, so probe upward from the requested port before spawning. Probe at
+// most ten ports and never past the top of the TCP port range; the exhaustion
+// error below reports this exact range.
+const lastProbedPort = Math.min(requestedPort + 9, 65535);
+
 function isPortFree(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -28,19 +32,18 @@ function isPortFree(port) {
   });
 }
 
-async function findAvailablePort(start) {
-  const maxPort = Math.min(start + 10, 65536);
-  for (let port = start; port < maxPort; port += 1) {
+async function findAvailablePort() {
+  for (let port = requestedPort; port <= lastProbedPort; port += 1) {
     if (await isPortFree(port)) return port;
   }
   return null;
 }
 
-const port = await findAvailablePort(requestedPort);
+const port = await findAvailablePort();
 
 if (!port) {
   console.error(
-    `No available port between ${requestedPort} and ${requestedPort + 9}. ` +
+    `No available port between ${requestedPort} and ${lastProbedPort}. ` +
       "Free one of those ports or set PORT to a free port.",
   );
   process.exit(1);
