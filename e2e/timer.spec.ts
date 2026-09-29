@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("work to break flow creates editable session history", async ({ page }) => {
+test("work to break flow creates editable session history", async ({
+  page,
+}) => {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();

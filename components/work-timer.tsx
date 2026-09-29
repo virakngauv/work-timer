@@ -12,15 +12,14 @@ import {
   type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
-import {
-  loadWorkday,
-  localDateKey,
-  saveWorkday,
-} from "@/lib/storage";
+import { localDateKey } from "@/lib/storage";
+import { useWorkday, writeWorkday } from "@/lib/workday-store";
 
 function createId(): string {
-  return globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 function MetricCard({
@@ -40,9 +39,7 @@ function MetricCard({
     work: active
       ? "border-emerald-300 bg-emerald-50"
       : "border-slate-200 bg-white",
-    break: active
-      ? "border-sky-300 bg-sky-50"
-      : "border-slate-200 bg-white",
+    break: active ? "border-sky-300 bg-sky-50" : "border-slate-200 bg-white",
     neutral: "border-slate-200 bg-white",
   };
 
@@ -58,22 +55,13 @@ function MetricCard({
 }
 
 export function WorkTimer() {
-  const [events, setEvents] = useState<TimerEvent[]>([]);
-  const [dayKey, setDayKey] = useState(() => localDateKey());
+  const workday = useWorkday();
+  const events = workday.events;
+  const dayKey = workday.dateKey;
   const [now, setNow] = useState(() => Date.now());
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    const workday = loadWorkday();
-    setDayKey(workday.dateKey);
-    setEvents(workday.events);
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveWorkday(dayKey, events);
-  }, [dayKey, events, hydrated]);
+  const [actionError, setActionError] = useState<string | null>(null);
+  // The server snapshot has an empty dateKey until the client store attaches.
+  const hydrated = dayKey !== "";
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250);
@@ -83,12 +71,27 @@ export function WorkTimer() {
   const totals = useMemo(() => calculateTotals(events, now), [events, now]);
   const state = currentState(events);
 
+  function persistEvents(nextEvents: TimerEvent[], dateKey = dayKey): boolean {
+    try {
+      writeWorkday({ dateKey, events: nextEvents });
+      setActionError(null);
+      return true;
+    } catch {
+      // Nothing was published, so the UI still shows the stored state.
+      setActionError(
+        "Could not save to browser storage. The change was not applied.",
+      );
+      return false;
+    }
+  }
+
   function transition(next: TimerState) {
     const timestamp = Date.now();
-    setNow(timestamp);
-    setEvents((current) =>
-      appendTransition(current, next, timestamp, createId()),
+    const persisted = persistEvents(
+      appendTransition(events, next, timestamp, createId()),
     );
+    if (!persisted) return;
+    setNow(timestamp);
   }
 
   function startDay() {
@@ -96,9 +99,12 @@ export function WorkTimer() {
     const today = localDateKey(timestamp);
 
     if (dayKey !== today) {
-      setDayKey(today);
+      const persisted = persistEvents(
+        appendTransition([], "work", timestamp, createId()),
+        today,
+      );
+      if (!persisted) return;
       setNow(timestamp);
-      setEvents(appendTransition([], "work", timestamp, createId()));
       return;
     }
 
@@ -118,16 +124,17 @@ export function WorkTimer() {
     if (timestamp > Date.now()) return "A session cannot start in the future.";
 
     try {
-      const corrected = editEventTimestamp(events, eventId, timestamp);
-      setEvents(corrected);
+      writeWorkday({
+        dateKey: dayKey,
+        events: editEventTimestamp(events, eventId, timestamp),
+      });
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : "Could not update time.";
     }
   }
 
-  const currentLabel =
-    state === "break" ? "Current Break" : "Current Session";
+  const currentLabel = state === "break" ? "Current Break" : "Current Session";
   const currentDescription =
     state === "stopped" ? "No active session" : "Time since last switch";
 
@@ -224,6 +231,12 @@ export function WorkTimer() {
           Every mode switch creates one timestamped state transition and starts
           a fresh current session.
         </p>
+
+        {actionError ? (
+          <p role="alert" className="mt-2 text-sm font-medium text-red-600">
+            {actionError}
+          </p>
+        ) : null}
       </section>
 
       <div className="mt-6">

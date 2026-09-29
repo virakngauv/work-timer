@@ -34,11 +34,11 @@ Place the history underneath the timer cards.
 
 Columns:
 
-| Mode | Started | Ended | Duration | Action |
-| --- | --- | --- | --- | --- |
-| Work | 9:02 AM | 10:11 AM | 1h 09m | Edit |
-| Break | 10:11 AM | 10:23 AM | 12m | Edit |
-| Work | 10:23 AM | Now | 42m | Edit |
+| Mode  | Started  | Ended    | Duration | Action |
+| ----- | -------- | -------- | -------- | ------ |
+| Work  | 9:02 AM  | 10:11 AM | 1h 09m   | Edit   |
+| Break | 10:11 AM | 10:23 AM | 12m      | Edit   |
+| Work  | 10:23 AM | Now      | 42m      | Edit   |
 
 The Ended column is normally derived from the next row's start event. It should not behave like an independent field.
 

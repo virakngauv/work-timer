@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # App dependencies are updated with pnpm directly: Dependabot's npm
+  # ecosystem supports pnpm up to v10, and this repo pins pnpm 12
+  # (lockfileVersion 9.0).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"

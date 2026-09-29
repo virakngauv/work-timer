@@ -1,0 +1,52 @@
+name: Check linked issue
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  issues: read
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate closing issue reference
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that the PR closes an open issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # GitHub resolves closing references itself, so text inside
+          # code blocks or non-closing mentions cannot satisfy the check.
+          open_issues=$(
+            gh api graphql \
+              -f owner="${GH_REPO%%/*}" \
+              -f repo="${GH_REPO#*/}" \
+              -F number="$PR_NUMBER" \
+              -f query='
+                query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $number) {
+                      closingIssuesReferences(first: 10) {
+                        nodes { number state }
+                      }
+                    }
+                  }
+                }' \
+              --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[]
+                    | select(.state == "OPEN")
+                    | "#\(.number)"' \
+            ) || open_issues=""
+
+          if [ -z "$open_issues" ]; then
+            echo "No open issue is linked through a closing reference (for example 'Closes #123')." >&2
+            exit 1
+          fi
+
+          echo "Open issues linked through closing references:"
+          printf '%s\n' "$open_issues"
