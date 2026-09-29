@@ -6,6 +6,17 @@ const lan = process.env.DEV_LAN === "true";
 const host = lan ? "0.0.0.0" : "127.0.0.1";
 const requestedPort = Number(process.env.PORT ?? "3000");
 
+if (
+  !Number.isInteger(requestedPort) ||
+  requestedPort < 1 ||
+  requestedPort > 65535
+) {
+  console.error(
+    `PORT must be an integer between 1 and 65535 (got "${process.env.PORT ?? ""}").`,
+  );
+  process.exit(1);
+}
+
 // Next.js 16 no longer falls back to another port when the requested one is
 // taken, so probe upward from the requested port before spawning.
 function isPortFree(port) {
@@ -18,7 +29,7 @@ function isPortFree(port) {
 }
 
 async function findAvailablePort(start) {
-  const maxPort = start + 10;
+  const maxPort = Math.min(start + 10, 65536);
   for (let port = start; port < maxPort; port += 1) {
     if (await isPortFree(port)) return port;
   }
