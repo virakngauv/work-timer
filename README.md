@@ -56,6 +56,8 @@ By default development binds to loopback. For trusted LAN testing:
 
     DEV_LAN=true pnpm dev
 
+If the requested port is busy, the dev script probes the next ports (up to ten) and logs the one it picked; set `PORT` to start elsewhere.
+
 ## Commands
 
     pnpm dev
