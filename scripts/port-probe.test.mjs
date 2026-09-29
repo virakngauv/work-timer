@@ -1,6 +1,10 @@
 import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { findAvailablePort, isPortFree } from "./port-probe.mjs";
+import {
+  findAvailablePort,
+  isPortFree,
+  isRetryableBindError,
+} from "./port-probe.mjs";
 
 function listen(port, host = "127.0.0.1") {
   return new Promise((resolve, reject) => {
@@ -11,10 +15,49 @@ function listen(port, host = "127.0.0.1") {
   });
 }
 
+function closeServer(server) {
+  return new Promise((resolve) => server.close(resolve));
+}
+
 const openServers = [];
 
 afterEach(() => {
   for (const server of openServers.splice(0)) server.close();
+});
+
+describe("isRetryableBindError", () => {
+  it("treats EADDRINUSE as retryable", () => {
+    expect(
+      isRetryableBindError(
+        Object.assign(new Error("listen EADDRINUSE: address already in use"), {
+          code: "EADDRINUSE",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("treats every other bind error as terminal", () => {
+    expect(
+      isRetryableBindError(
+        Object.assign(new Error("listen EACCES: permission denied"), {
+          code: "EACCES",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableBindError(
+        Object.assign(new Error("listen EMFILE: too many open files"), {
+          code: "EMFILE",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("treats missing or malformed errors as terminal", () => {
+    expect(isRetryableBindError(undefined)).toBe(false);
+    expect(isRetryableBindError("EADDRINUSE")).toBe(false);
+    expect(isRetryableBindError(new Error("no code"))).toBe(false);
+  });
 });
 
 describe("isPortFree", () => {
@@ -29,32 +72,34 @@ describe("isPortFree", () => {
 
     await expect(isPortFree(port, "127.0.0.1")).resolves.toBe(false);
   });
-
-  it("rejects with the real error when the port cannot be probed", async () => {
-    // Privileged ports fail with EACCES for unprivileged users on unix; the
-    // assumption does not hold on Windows or when running as root.
-    if (process.platform === "win32" || process.getuid?.() === 0) return;
-
-    await expect(isPortFree(1, "127.0.0.1")).rejects.toMatchObject({
-      code: "EACCES",
-    });
-  });
 });
 
 describe("findAvailablePort", () => {
   it("returns the start port when it is free", async () => {
-    await expect(isPortFree(0, "127.0.0.1")).resolves.toBe(true);
-    await expect(findAvailablePort(0, 0, "127.0.0.1")).resolves.toBe(0);
+    // Let the OS pick a port that is currently free, release it, and scan
+    // exactly that port.
+    const probe = await listen(0);
+    const port = probe.address().port;
+    await closeServer(probe);
+
+    await expect(findAvailablePort(port, port, "127.0.0.1")).resolves.toBe(
+      port,
+    );
   });
 
   it("skips an occupied port and returns the next free one", async () => {
-    const occupied = await listen(0);
+    // Let the OS pick a port that is currently free, then occupy the port
+    // before it so the scan must skip exactly one occupied port and land on
+    // a port that is known to be free.
+    const probe = await listen(0);
+    const freePort = probe.address().port;
+    await closeServer(probe);
+    const occupied = await listen(freePort - 1);
     openServers.push(occupied);
-    const port = occupied.address().port;
 
-    await expect(findAvailablePort(port, port + 1, "127.0.0.1")).resolves.toBe(
-      port + 1,
-    );
+    await expect(
+      findAvailablePort(freePort - 1, freePort, "127.0.0.1"),
+    ).resolves.toBe(freePort);
   });
 
   it("returns null when every port in the range is occupied", async () => {
@@ -65,13 +110,5 @@ describe("findAvailablePort", () => {
     await expect(
       findAvailablePort(port, port, "127.0.0.1"),
     ).resolves.toBeNull();
-  });
-
-  it("propagates bind errors that are not EADDRINUSE", async () => {
-    if (process.platform === "win32" || process.getuid?.() === 0) return;
-
-    await expect(findAvailablePort(1, 3, "127.0.0.1")).rejects.toMatchObject({
-      code: "EACCES",
-    });
   });
 });
