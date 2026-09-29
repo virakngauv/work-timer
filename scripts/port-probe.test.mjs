@@ -1,5 +1,5 @@
 import net from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   findAvailablePort,
   isPortFree,
@@ -13,10 +13,6 @@ function listen(port, host = "127.0.0.1") {
     server.once("listening", () => resolve(server));
     server.listen(port, host);
   });
-}
-
-function closeServer(server) {
-  return new Promise((resolve) => server.close(resolve));
 }
 
 const openServers = [];
@@ -75,38 +71,59 @@ describe("isPortFree", () => {
 });
 
 describe("findAvailablePort", () => {
-  it("returns the start port when it is free", async () => {
-    // Let the OS pick a port that is currently free, release it, and scan
-    // exactly that port.
-    const probe = await listen(0);
-    const port = probe.address().port;
-    await closeServer(probe);
-
-    await expect(findAvailablePort(port, port, "127.0.0.1")).resolves.toBe(
-      port,
-    );
-  });
-
-  it("skips an occupied port and returns the next free one", async () => {
-    // Let the OS pick a port that is currently free, then occupy the port
-    // before it so the scan must skip exactly one occupied port and land on
-    // a port that is known to be free.
-    const probe = await listen(0);
-    const freePort = probe.address().port;
-    await closeServer(probe);
-    const occupied = await listen(freePort - 1);
-    openServers.push(occupied);
+  // Scan logic is exercised through an injected probe so the tests stay
+  // deterministic; real sockets cannot guarantee anything about the
+  // neighbors of an OS-assigned port.
+  it("returns the first port the probe reports as free", async () => {
+    const probe = vi.fn().mockResolvedValue(true);
 
     await expect(
-      findAvailablePort(freePort - 1, freePort, "127.0.0.1"),
-    ).resolves.toBe(freePort);
+      findAvailablePort(3000, 3002, "127.0.0.1", probe),
+    ).resolves.toBe(3000);
+    expect(probe).toHaveBeenCalledWith(3000, "127.0.0.1");
   });
 
-  it("returns null when every port in the range is occupied", async () => {
+  it("skips ports the probe reports as occupied", async () => {
+    const probe = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    await expect(
+      findAvailablePort(3000, 3002, "127.0.0.1", probe),
+    ).resolves.toBe(3001);
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns null when the probe reports every port occupied", async () => {
+    const probe = vi.fn().mockResolvedValue(false);
+
+    await expect(
+      findAvailablePort(3000, 3001, "127.0.0.1", probe),
+    ).resolves.toBeNull();
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates bind errors the probe rejects with", async () => {
+    const probe = vi.fn().mockRejectedValue(
+      Object.assign(new Error("listen EACCES: permission denied"), {
+        code: "EACCES",
+      }),
+    );
+
+    await expect(
+      findAvailablePort(3000, 3002, "127.0.0.1", probe),
+    ).rejects.toMatchObject({ code: "EACCES" });
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it("probes real sockets by default", async () => {
     const server = await listen(0);
     openServers.push(server);
     const port = server.address().port;
 
+    // One real-socket scan over exactly one occupied port: the default
+    // probe reports it occupied, so the scan finds nothing.
     await expect(
       findAvailablePort(port, port, "127.0.0.1"),
     ).resolves.toBeNull();

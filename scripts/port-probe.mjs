@@ -20,9 +20,9 @@ export function isPortFree(port, host) {
   });
 }
 
-export async function findAvailablePort(start, end, host) {
+export async function findAvailablePort(start, end, host, probe = isPortFree) {
   for (let port = start; port <= end; port += 1) {
-    if (await isPortFree(port, host)) return port;
+    if (await probe(port, host)) return port;
   }
   return null;
 }
