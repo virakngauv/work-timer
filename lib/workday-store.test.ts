@@ -13,6 +13,31 @@ function id(): string {
 }
 
 describe("workday actions", () => {
+  it.each(["work", "break"] as const)(
+    "allows Stop Day from a stale %s mode after another tab switches",
+    (from) => {
+      const latest: PersistedWorkday = {
+        ...base,
+        events:
+          from === "work"
+            ? [
+                ...base.events,
+                { id: "break", state: "break", at: start + 1_000 },
+              ]
+            : base.events,
+      };
+      const result = applyWorkdayAction(
+        latest,
+        { type: "transition", from, state: "stopped" },
+        start + 2_000,
+        id,
+      );
+      expect(result.mutation.type).toBe("append");
+      expect(result.workday.events.at(-1)?.state).toBe("stopped");
+      expect(result.workday.events.slice(0, -1)).toEqual(latest.events);
+    },
+  );
+
   it("coalesces a repeated explicit transition instead of toggling twice", () => {
     const first = applyWorkdayAction(
       base,

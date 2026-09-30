@@ -72,7 +72,7 @@ export function applyWorkdayAction(
   if (state === action.state) {
     return { workday: base, mutation: { type: "none" } };
   }
-  if (state !== action.from) {
+  if (state !== action.from && action.state !== "stopped") {
     throw new Error(
       "The timer changed in another tab. Check its current mode and try again.",
     );

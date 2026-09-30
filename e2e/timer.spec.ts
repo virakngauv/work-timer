@@ -154,6 +154,41 @@ test("deduplicates stale transitions", async ({ context, page }) => {
   expect(stored.events[1].at).toBeGreaterThan(stored.events[0].at);
 });
 
+test("stops the latest mode when another tab has switched", async ({
+  context,
+  page,
+}) => {
+  await suppressBroadcastNotifications(context);
+  await context.addInitScript(() => {
+    const original = window.addEventListener;
+    window.addEventListener = function (...args: Parameters<typeof original>) {
+      if (args[0] === "focus") return;
+      return original.apply(this, args);
+    };
+    const originalDocument = document.addEventListener;
+    document.addEventListener = function (
+      ...args: Parameters<typeof originalDocument>
+    ) {
+      if (args[0] === "visibilitychange") return;
+      return originalDocument.apply(this, args);
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start Day" }).click();
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+  const other = await context.newPage();
+  await other.goto("/");
+  await expect(other.getByText("WORK MODE")).toBeVisible();
+  await other.getByRole("button", { name: "Switch to Break" }).click();
+  await expect(other.getByText("BREAK MODE")).toBeVisible();
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+  await page.getByRole("button", { name: "Stop Day" }).click();
+  await expect(page.getByText("STOPPED")).toBeVisible();
+  expect(
+    (await readIndexedWorkday(page)).events.map((event) => event.state),
+  ).toEqual(["work", "break", "stopped"]);
+});
+
 test("preserves an edit racing a transition", async ({ context, page }) => {
   await suppressBroadcastNotifications(context);
   await page.goto("/");
