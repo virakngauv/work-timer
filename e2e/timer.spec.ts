@@ -33,10 +33,7 @@ async function readIndexedWorkday(page: Page): Promise<IndexedWorkday> {
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
           const database = open.result;
-          const transaction = database.transaction(
-            ["meta", "events"],
-            "readonly",
-          );
+          const transaction = database.transaction(["meta", "events"], "readonly");
           const meta = transaction.objectStore("meta").get("current");
           const events = transaction.objectStore("events").getAll();
           transaction.oncomplete = () => {
@@ -132,9 +129,7 @@ test("preserves malformed legacy data and reports the migration error", async ({
   await expect(page.locator("main").getByRole("alert")).toContainText(
     "unreadable",
   );
-  await expect(
-    page.getByRole("button", { name: "Start Day" }),
-  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Start Day" })).toBeDisabled();
   expect(
     await page.evaluate(() => localStorage.getItem("work-timer:v1")),
   ).toBe("{broken");
