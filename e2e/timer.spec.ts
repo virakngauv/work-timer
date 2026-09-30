@@ -1,11 +1,64 @@
-import { expect, test } from "@playwright/test";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 
-test("work to break flow creates editable session history", async ({
-  page,
-}) => {
+interface IndexedWorkday {
+  dateKey: string;
+  events: Array<{ id: string; state: string; at: number }>;
+}
+
+async function seedLegacyStorage(
+  context: BrowserContext,
+  raw: string,
+): Promise<void> {
+  await context.addInitScript((value) => {
+    localStorage.setItem("work-timer:v1", value);
+  }, raw);
+}
+
+async function readIndexedWorkday(page: Page): Promise<IndexedWorkday> {
+  return page.evaluate(
+    () =>
+      new Promise<IndexedWorkday>((resolve, reject) => {
+        const open = indexedDB.open("work-timer", 1);
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const database = open.result;
+          const transaction = database.transaction(
+            ["meta", "events"],
+            "readonly",
+          );
+          const meta = transaction.objectStore("meta").get("current");
+          const events = transaction.objectStore("events").getAll();
+          transaction.oncomplete = () => {
+            database.close();
+            const result = meta.result as { dateKey: string } | undefined;
+            if (!result) {
+              reject(new Error("Missing workday metadata"));
+              return;
+            }
+            resolve({
+              dateKey: result.dateKey,
+              events: (
+                events.result as Array<{
+                  id: string;
+                  state: string;
+                  at: number;
+                }>
+              ).sort((left, right) => left.at - right.at),
+            });
+          };
+          transaction.onabort = () => reject(transaction.error);
+        };
+      }),
+  );
+}
+
+test("work to break flow creates editable session history", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
 
   await expect(page.getByText("STOPPED")).toBeVisible();
   await page.getByRole("button", { name: "Start Day" }).click();
@@ -23,68 +76,121 @@ test("work to break flow creates editable session history", async ({
   await expect(page.getByRole("button", { name: "-5 min" })).toBeVisible();
 });
 
+test("migrates valid localStorage once and never lets legacy data replace IndexedDB", async ({
+  context,
+  page,
+}) => {
+  const startedAt = Date.now() - 10 * 60_000;
+  const date = new Date(startedAt);
+  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+  await seedLegacyStorage(
+    context,
+    JSON.stringify({
+      version: 1,
+      dateKey,
+      events: [{ id: "legacy", state: "work", at: startedAt }],
+    }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem("work-timer:v1")),
+  ).toBeNull();
+  expect((await readIndexedWorkday(page)).events).toEqual([
+    { id: "legacy", state: "work", at: startedAt },
+  ]);
+
+  await page.evaluate(() =>
+    localStorage.setItem("work-timer:v1", "{broken"),
+  );
+  await page.reload();
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+  expect((await readIndexedWorkday(page)).events).toEqual([
+    { id: "legacy", state: "work", at: startedAt },
+  ]);
+  expect(
+    await page.evaluate(() => localStorage.getItem("work-timer:v1")),
+  ).toBe("{broken");
+});
+
+test("preserves malformed legacy data and reports the migration error", async ({
+  context,
+  page,
+}) => {
+  await seedLegacyStorage(context, "{broken");
+
+  await page.goto("/");
+
+  await expect(page.getByRole("alert")).toContainText("unreadable");
+  await expect(
+    page.getByRole("button", { name: "Start Day" }),
+  ).toBeDisabled();
+  expect(
+    await page.evaluate(() => localStorage.getItem("work-timer:v1")),
+  ).toBe("{broken");
+});
+
 test("simultaneous stale-tab requests serialize without duplicate transitions", async ({
   context,
   page,
 }) => {
-  // Delay notifications deliberately so both buttons act from the same old view.
-  await context.addInitScript(() => {
-    const add = window.addEventListener.bind(window);
-    window.addEventListener = ((type: string, ...args: unknown[]) => {
-      if (type !== "storage") Reflect.apply(add, window, [type, ...args]);
-    }) as typeof window.addEventListener;
-  });
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
   await expect(page.getByText("WORK MODE")).toBeVisible();
+
   const other = await context.newPage();
   await other.goto("/");
   await expect(other.getByText("WORK MODE")).toBeVisible();
 
-  // Hold the real browser lock until both UI actions have queued behind it.
-  await page.evaluate(() => {
-    void navigator.locks.request(
-      "work-timer:write",
-      () =>
-        new Promise<void>((resolve) => {
-          (
-            window as Window & { releaseWriteLock?: () => void }
-          ).releaseWriteLock = resolve;
-        }),
-    );
-  });
-  await expect
-    .poll(() =>
-      page.evaluate(async () => (await navigator.locks.query()).held?.length),
-    )
-    .toBe(1);
   await Promise.all([
     page.getByRole("button", { name: "Switch to Break" }).click(),
     other.getByRole("button", { name: "Switch to Break" }).click(),
   ]);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        async () => (await navigator.locks.query()).pending?.length,
-      ),
-    )
-    .toBe(2);
-  await page.evaluate(() =>
-    (window as Window & { releaseWriteLock?: () => void }).releaseWriteLock?.(),
-  );
+
   await expect(page.getByText("BREAK MODE")).toBeVisible();
   await expect(other.getByText("BREAK MODE")).toBeVisible();
-  const events = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("work-timer:v1")!).events,
-  );
-  expect(events.map((event: { state: string }) => event.state)).toEqual([
-    "work",
-    "break",
-  ]);
-  expect(events[1].at).toBeGreaterThan(events[0].at);
+  const stored = await readIndexedWorkday(page);
+  expect(stored.events.map((event) => event.state)).toEqual(["work", "break"]);
+  expect(stored.events[1].at).toBeGreaterThan(stored.events[0].at);
 });
 
-test("cross-tab data updates preserve the open editor without navigation", async ({
+test("a boundary edit racing another tab's transition keeps both writes", async ({
+  context,
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start Day" }).click();
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+
+  const other = await context.newPage();
+  await other.goto("/");
+  await expect(other.getByText("WORK MODE")).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "-1 min", exact: true }).click();
+  const editedAt = await page.getByLabel("Exact start time").inputValue();
+  const expectedAt = await page.evaluate(
+    (value) => new Date(value).getTime(),
+    editedAt,
+  );
+
+  await Promise.all([
+    page.getByRole("button", { name: "Save", exact: true }).click(),
+    other.getByRole("button", { name: "Switch to Break" }).click(),
+  ]);
+
+  await expect(other.getByText("BREAK MODE")).toBeVisible();
+  await expect(page.getByLabel("Exact start time")).not.toBeVisible();
+  const stored = await readIndexedWorkday(page);
+  expect(stored.events.map((event) => event.state)).toEqual(["work", "break"]);
+  expect(stored.events[0].at).toBe(expectedAt);
+});
+
+test("cross-tab data updates preserve the open editor and focus", async ({
   context,
   page,
 }) => {
@@ -99,9 +205,11 @@ test("cross-tab data updates preserve the open editor without navigation", async
   page.on("framenavigated", () => {
     navigations += 1;
   });
+
   const other = await context.newPage();
   await other.goto("/");
   await other.getByRole("button", { name: "Switch to Break" }).click();
+
   await expect(page.getByText("BREAK MODE")).toBeVisible();
   await expect(input).toBeVisible();
   await expect(input).toBeFocused();
@@ -109,79 +217,37 @@ test("cross-tab data updates preserve the open editor without navigation", async
   expect(navigations).toBe(0);
 });
 
-test("a boundary edit and another tab's transition both persist", async ({
-  context,
+test("a failed IndexedDB transaction leaves stored state unchanged", async ({
   page,
 }) => {
-  await context.addInitScript(() => {
-    const add = window.addEventListener.bind(window);
-    window.addEventListener = ((type: string, ...args: unknown[]) => {
-      if (type !== "storage") Reflect.apply(add, window, [type, ...args]);
-    }) as typeof window.addEventListener;
-  });
   await page.goto("/");
-  await page.evaluate(() => {
-    const now = new Date();
-    localStorage.setItem(
-      "work-timer:v1",
-      JSON.stringify({
-        version: 1,
-        dateKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
-        events: [{ id: "seed", state: "work", at: Date.now() - 600_000 }],
-      }),
-    );
-  });
-  await page.reload();
-  await expect(page.getByText("WORK MODE")).toBeVisible();
-  const other = await context.newPage();
-  await other.goto("/");
-  await expect(other.getByText("WORK MODE")).toBeVisible();
-  await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByRole("button", { name: "-1 min", exact: true }).click();
-  const editedAt = await page.getByLabel("Exact start time").inputValue();
-  const expectedAt = await page.evaluate(
-    (value) => new Date(value).getTime(),
-    editedAt,
-  );
+  const start = page.getByRole("button", { name: "Start Day" });
+  await expect(start).toBeEnabled();
 
   await page.evaluate(() => {
-    void navigator.locks.request(
-      "work-timer:write",
-      () =>
-        new Promise<void>((resolve) => {
-          (
-            window as Window & { releaseWriteLock?: () => void }
-          ).releaseWriteLock = resolve;
-        }),
-    );
+    const prototype = IDBObjectStore.prototype;
+    const original = prototype.add;
+    (
+      window as Window & { restoreIndexedDbAdd?: () => void }
+    ).restoreIndexedDbAdd = () => {
+      prototype.add = original;
+    };
+    prototype.add = function () {
+      throw new DOMException("forced failure", "QuotaExceededError");
+    };
   });
-  await expect
-    .poll(() =>
-      page.evaluate(async () => (await navigator.locks.query()).held?.length),
-    )
-    .toBe(1);
-  await Promise.all([
-    page.getByRole("button", { name: "Save", exact: true }).click(),
-    other.getByRole("button", { name: "Switch to Break" }).click(),
-  ]);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        async () => (await navigator.locks.query()).pending?.length,
-      ),
-    )
-    .toBe(2);
+
+  await start.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Could not save timer data. The change was not applied.",
+  );
+  expect((await readIndexedWorkday(page)).events).toEqual([]);
+
   await page.evaluate(() =>
-    (window as Window & { releaseWriteLock?: () => void }).releaseWriteLock?.(),
+    (
+      window as Window & { restoreIndexedDbAdd?: () => void }
+    ).restoreIndexedDbAdd?.(),
   );
-  await expect(page.getByLabel("Exact start time")).not.toBeVisible();
-  await expect(other.getByText("BREAK MODE")).toBeVisible();
-  const events = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("work-timer:v1")!).events,
-  );
-  expect(events.map((event: { state: string }) => event.state)).toEqual([
-    "work",
-    "break",
-  ]);
-  expect(events[0].at).toBe(expectedAt);
+  await start.click();
+  await expect(page.getByText("WORK MODE")).toBeVisible();
 });
