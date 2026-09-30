@@ -15,7 +15,9 @@ async function seedLegacyStorage(
   raw: string,
 ): Promise<void> {
   await context.addInitScript((value) => {
+    if (sessionStorage.getItem("work-timer:test-seeded") === "1") return;
     localStorage.setItem("work-timer:v1", value);
+    sessionStorage.setItem("work-timer:test-seeded", "1");
   }, raw);
 }
 
