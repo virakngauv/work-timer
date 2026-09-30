@@ -1,28 +1,82 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { installWebLocks } from "@/test/web-locks";
-import { WorkTimer } from "@/components/work-timer";
-import { localDateKey, STORAGE_KEY } from "@/lib/storage";
 
-function simulateExternalStorageChange(): void {
-  window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
-}
+const mockedStore = vi.hoisted(() => ({
+  snapshot: {
+    dateKey: "",
+    events: [] as Array<{
+      id: string;
+      at: number;
+      state: "work" | "break" | "stopped";
+    }>,
+    error: null as string | null,
+  },
+  nextError: null as string | null,
+}));
+
+vi.mock("@/lib/workday-store", () => ({
+  useWorkday: () => mockedStore.snapshot,
+  dispatchWorkday: vi.fn(
+    async (
+      action:
+        | {
+            type: "transition";
+            from: "work" | "break" | "stopped";
+            state: "work" | "break" | "stopped";
+          }
+        | { type: "edit"; eventId: string; at: number },
+    ) => {
+      if (mockedStore.nextError) throw new Error(mockedStore.nextError);
+
+      if (action.type === "transition") {
+        const current = mockedStore.snapshot.events.at(-1)?.state ?? "stopped";
+        if (current !== action.state) {
+          mockedStore.snapshot = {
+            ...mockedStore.snapshot,
+            events: [
+              ...mockedStore.snapshot.events,
+              {
+                id: `event-${mockedStore.snapshot.events.length + 1}`,
+                at: Date.now(),
+                state: action.state,
+              },
+            ],
+          };
+        }
+        return;
+      }
+
+      mockedStore.snapshot = {
+        ...mockedStore.snapshot,
+        events: mockedStore.snapshot.events.map((event) =>
+          event.id === action.eventId ? { ...event, at: action.at } : event,
+        ),
+      };
+    },
+  ),
+}));
+
+import { WorkTimer } from "@/components/work-timer";
+import { localDateKey } from "@/lib/storage";
 
 afterEach(cleanup);
 
 describe("WorkTimer", () => {
   beforeEach(() => {
-    installWebLocks();
-    window.localStorage.clear();
-    simulateExternalStorageChange();
+    mockedStore.snapshot = {
+      dateKey: localDateKey(),
+      events: [],
+      error: null,
+    };
+    mockedStore.nextError = null;
   });
 
   it("starts in stopped mode and switches work to break with one action", async () => {
     const user = userEvent.setup();
     render(<WorkTimer />);
 
-    expect(await screen.findByText("STOPPED")).toBeInTheDocument();
+    expect(screen.getByText("STOPPED")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Start Day" }));
     expect(screen.getByText("WORK MODE")).toBeInTheDocument();
@@ -37,69 +91,32 @@ describe("WorkTimer", () => {
     expect(screen.getAllByText(/Break/).length).toBeGreaterThan(0);
   });
 
-  it("restores an in-progress day from localStorage", () => {
-    const startedAt = Date.now() - 30 * 60_000;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        dateKey: localDateKey(startedAt),
-        events: [{ id: "seed-event", at: startedAt, state: "work" }],
-      }),
-    );
-    simulateExternalStorageChange();
+  it("renders store initialization errors and keeps actions disabled", () => {
+    mockedStore.snapshot = {
+      dateKey: "",
+      events: [],
+      error: "Existing timer data is unreadable.",
+    };
 
     render(<WorkTimer />);
 
-    expect(screen.getByText("WORK MODE")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Switch to Break" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Stop Day" }),
-    ).toBeInTheDocument();
-  });
-
-  it("follows workday changes written by another tab", async () => {
-    render(<WorkTimer />);
-
-    expect(screen.getByText("STOPPED")).toBeInTheDocument();
-
-    const startedAt = Date.now() - 10 * 60_000;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        dateKey: localDateKey(startedAt),
-        events: [{ id: "other-tab-event", at: startedAt, state: "work" }],
-      }),
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Existing timer data is unreadable.",
     );
-    simulateExternalStorageChange();
-
-    expect(await screen.findByText("WORK MODE")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Switch to Break" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Day" })).toBeDisabled();
   });
 
-  it("surfaces a storage failure instead of losing the action silently", async () => {
+  it("surfaces a failed action without changing the visible mode", async () => {
     const user = userEvent.setup();
-    const setItemSpy = vi
-      .spyOn(Storage.prototype, "setItem")
-      .mockImplementation(() => {
-        throw new DOMException("QuotaExceededError");
-      });
+    mockedStore.nextError =
+      "Could not save timer data. The change was not applied.";
 
     render(<WorkTimer />);
-    expect(screen.getByText("STOPPED")).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "Start Day" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Could not save to browser storage. The change was not applied.",
+      "Could not save timer data. The change was not applied.",
     );
     expect(screen.getByText("STOPPED")).toBeInTheDocument();
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
-    setItemSpy.mockRestore();
   });
 });
