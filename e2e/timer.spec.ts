@@ -209,9 +209,12 @@ test("rejects stale edit after new boundary", async ({ context, page }) => {
 
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "+5 min", exact: true }).click();
-  await other.evaluate((now) => {
-    Date.now = () => now;
-  }, startedAt + 2 * 60_000);
+  await other.evaluate(
+    (now) => {
+      Date.now = () => now;
+    },
+    startedAt + 2 * 60_000,
+  );
   await other.getByRole("button", { name: "Switch to Break" }).click();
   await expect(other.getByText("BREAK MODE")).toBeVisible();
 
