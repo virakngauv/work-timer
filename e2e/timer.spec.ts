@@ -184,6 +184,47 @@ test("preserves an edit racing a transition", async ({ context, page }) => {
   expect(stored.events[0].at).toBe(expectedAt);
 });
 
+test("validates a stale edit against a new boundary", async ({ context, page }) => {
+  await suppressBroadcastNotifications(context);
+  const startedAt = Date.now() - 10 * 60_000;
+  const date = new Date(startedAt);
+  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+  await seedLegacyStorage(
+    context,
+    JSON.stringify({
+      version: 1,
+      dateKey,
+      events: [{ id: "legacy", state: "work", at: startedAt }],
+    }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+  const other = await context.newPage();
+  await other.goto("/");
+  await expect(other.getByText("WORK MODE")).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "+5 min", exact: true }).click();
+  await other.evaluate((now) => {
+    Date.now = () => now;
+  }, startedAt + 2 * 60_000);
+  await other.getByRole("button", { name: "Switch to Break" }).click();
+  await expect(other.getByText("BREAK MODE")).toBeVisible();
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByText("Start time must be before the next boundary."),
+  ).toBeVisible();
+
+  const stored = await readIndexedWorkday(page);
+  expect(stored.events[0].at).toBe(startedAt);
+  expect(stored.events.map((event) => event.state)).toEqual(["work", "break"]);
+});
+
 test("preserves editor focus across tabs", async ({ context, page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
