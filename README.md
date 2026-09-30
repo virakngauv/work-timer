@@ -76,6 +76,10 @@ If the requested port is busy, the dev script probes the next ports (up to ten) 
 
 The MVP stores a single workday event stream in browser localStorage. Clearing site data clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
 
+All timer actions and boundary edits read, validate, and save the latest events under one shared Web Lock, so cooperating tabs cannot overwrite each other's changes. Repeated requests for the current mode do nothing; other stale mode requests show an error. The existing storage event updates other tabs in place without reloading the page.
+
+Saving requires Web Locks in a secure context (HTTPS or localhost). Unsupported browsers and plain HTTP LAN previews can display stored history but cannot save changes; the UI shows an error instead of writing without a lock. Reload any tabs running an older app version so all writers use the lock.
+
 ## Repository setup status
 
 The code, documentation, tests, and project configuration are scaffolded. The lockfile is committed and CI runs quality checks, the production build, Playwright e2e on all three engines, CodeQL, and linked-issue validation. See [docs/setup-status.md](docs/setup-status.md).

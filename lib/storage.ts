@@ -33,7 +33,7 @@ export function localDateKey(timestamp = Date.now()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function loadWorkday(): PersistedWorkday {
+export function loadWorkday(strict = false): PersistedWorkday {
   const today = localDateKey();
   const empty: PersistedWorkday = { dateKey: today, events: [] };
 
@@ -41,6 +41,10 @@ export function loadWorkday(): PersistedWorkday {
   try {
     raw = window.localStorage.getItem(STORAGE_KEY);
   } catch {
+    if (strict)
+      throw new Error(
+        "Could not read browser storage. The change was not applied.",
+      );
     // Storage can be denied by browser settings; fall back to an empty day.
     return empty;
   }

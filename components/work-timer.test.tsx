@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { installWebLocks } from "@/test/web-locks";
 import { WorkTimer } from "@/components/work-timer";
 import { localDateKey, STORAGE_KEY } from "@/lib/storage";
 
@@ -12,6 +13,7 @@ afterEach(cleanup);
 
 describe("WorkTimer", () => {
   beforeEach(() => {
+    installWebLocks();
     window.localStorage.clear();
     simulateExternalStorageChange();
   });
