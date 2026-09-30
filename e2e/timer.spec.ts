@@ -79,10 +79,7 @@ test("work to break flow creates editable session history", async ({ page }) => 
   await expect(page.getByRole("button", { name: "-5 min" })).toBeVisible();
 });
 
-test("migrates valid localStorage once and never lets legacy data replace IndexedDB", async ({
-  context,
-  page,
-}) => {
+test("migrates legacy localStorage once", async ({ context, page }) => {
   const startedAt = Date.now() - 10 * 60_000;
   const date = new Date(startedAt);
   const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
@@ -118,10 +115,7 @@ test("migrates valid localStorage once and never lets legacy data replace Indexe
   ).toBe("{broken");
 });
 
-test("preserves malformed legacy data and reports the migration error", async ({
-  context,
-  page,
-}) => {
+test("preserves malformed legacy data", async ({ context, page }) => {
   await seedLegacyStorage(context, "{broken");
 
   await page.goto("/");
@@ -135,10 +129,7 @@ test("preserves malformed legacy data and reports the migration error", async ({
   ).toBe("{broken");
 });
 
-test("simultaneous stale-tab requests serialize without duplicate transitions", async ({
-  context,
-  page,
-}) => {
+test("deduplicates stale transitions", async ({ context, page }) => {
   await suppressBroadcastNotifications(context);
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
@@ -160,10 +151,7 @@ test("simultaneous stale-tab requests serialize without duplicate transitions", 
   expect(stored.events[1].at).toBeGreaterThan(stored.events[0].at);
 });
 
-test("a boundary edit racing another tab's transition keeps both writes", async ({
-  context,
-  page,
-}) => {
+test("preserves an edit racing a transition", async ({ context, page }) => {
   await suppressBroadcastNotifications(context);
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
@@ -193,10 +181,7 @@ test("a boundary edit racing another tab's transition keeps both writes", async 
   expect(stored.events[0].at).toBe(expectedAt);
 });
 
-test("cross-tab data updates preserve the open editor and focus", async ({
-  context,
-  page,
-}) => {
+test("preserves editor focus across tabs", async ({ context, page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
   await expect(page.getByText("WORK MODE")).toBeVisible();
@@ -220,9 +205,7 @@ test("cross-tab data updates preserve the open editor and focus", async ({
   expect(navigations).toBe(0);
 });
 
-test("a failed IndexedDB transaction leaves stored state unchanged", async ({
-  page,
-}) => {
+test("rolls back a failed IndexedDB transaction", async ({ page }) => {
   await page.goto("/");
   const start = page.getByRole("button", { name: "Start Day" });
   await expect(start).toBeEnabled();
