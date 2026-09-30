@@ -73,10 +73,7 @@ export function subscribeToWorkday(listener: () => void): () => void {
     if (listeners.size === 0) {
       window.removeEventListener("focus", handleReturnToPage);
       window.removeEventListener("pageshow", handleReturnToPage);
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       closeChangeChannel();
     }
   };
