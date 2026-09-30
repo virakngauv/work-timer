@@ -61,6 +61,9 @@ function openDatabase(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => {
       const database = request.result;
+      database.onclose = () => {
+        databasePromise = null;
+      };
       database.onversionchange = () => {
         database.close();
         databasePromise = null;

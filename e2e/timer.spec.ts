@@ -252,6 +252,46 @@ test("preserves editor focus across tabs", async ({ context, page }) => {
   expect(navigations).toBe(0);
 });
 
+test("reopens unexpectedly closed storage without reloading", async ({
+  context,
+  page,
+}) => {
+  await context.addInitScript(() => {
+    const original = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (...args) {
+      const request = original.apply(this, args);
+      if (args[0] === "work-timer") {
+        request.addEventListener("success", () => {
+          const state = window as Window & { timerDatabase?: IDBDatabase };
+          state.timerDatabase ??= request.result;
+        });
+      }
+      return request;
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start Day" }).click();
+  await expect(page.getByText("WORK MODE")).toBeVisible();
+  let navigations = 0;
+  page.on("framenavigated", () => {
+    navigations += 1;
+  });
+  await page.evaluate(() => {
+    const database = (window as Window & { timerDatabase?: IDBDatabase })
+      .timerDatabase;
+    if (!database) throw new Error("Missing app database connection");
+    database.close();
+    // Explicit close does not emit this event; simulate the browser's forced-close notification.
+    database.dispatchEvent(new Event("close"));
+  });
+  await page.getByRole("button", { name: "Switch to Break" }).click();
+  await expect(page.getByText("BREAK MODE")).toBeVisible();
+  expect(
+    (await readIndexedWorkday(page)).events.map((event) => event.state),
+  ).toEqual(["work", "break"]);
+  expect(navigations).toBe(0);
+});
+
 test("rolls back a failed IndexedDB transaction", async ({ page }) => {
   await page.goto("/");
   const start = page.getByRole("button", { name: "Start Day" });
