@@ -1,4 +1,4 @@
-import { currentState, type TimerEvent } from "@/lib/timer";
+import { canTransition, type TimerEvent, type TimerState } from "@/lib/timer";
 
 export const STORAGE_KEY = "work-timer:v1";
 
@@ -11,12 +11,19 @@ interface StoredPayload extends PersistedWorkday {
   version: 1;
 }
 
+function invalidLegacyData(): Error {
+  return new Error(
+    "Existing timer data is unreadable. It was left unchanged so it can be recovered manually.",
+  );
+}
+
 function isTimerEvent(value: unknown): value is TimerEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Partial<TimerEvent>;
 
   return (
     typeof event.id === "string" &&
+    event.id.length > 0 &&
     typeof event.at === "number" &&
     Number.isFinite(event.at) &&
     (event.state === "work" ||
@@ -33,45 +40,54 @@ export function localDateKey(timestamp = Date.now()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function loadWorkday(strict = false): PersistedWorkday {
-  const today = localDateKey();
-  const empty: PersistedWorkday = { dateKey: today, events: [] };
+export function parseLegacyWorkday(raw: string): PersistedWorkday {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw invalidLegacyData();
+  }
 
+  if (!parsed || typeof parsed !== "object") throw invalidLegacyData();
+  const payload = parsed as Partial<StoredPayload>;
+  if (
+    payload.version !== 1 ||
+    typeof payload.dateKey !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(payload.dateKey) ||
+    !Array.isArray(payload.events) ||
+    !payload.events.every(isTimerEvent)
+  ) {
+    throw invalidLegacyData();
+  }
+
+  const ids = new Set<string>();
+  let previousState: TimerState | null = null;
+  let previousAt = -Infinity;
+  for (const event of payload.events) {
+    if (
+      ids.has(event.id) ||
+      event.at <= previousAt ||
+      !canTransition(previousState, event.state)
+    ) {
+      throw invalidLegacyData();
+    }
+    ids.add(event.id);
+    previousAt = event.at;
+    previousState = event.state;
+  }
+
+  return { dateKey: payload.dateKey, events: payload.events };
+}
+
+export function readLegacyWorkday(): PersistedWorkday | null {
   let raw: string | null;
   try {
     raw = window.localStorage.getItem(STORAGE_KEY);
   } catch {
-    if (strict)
-      throw new Error(
-        "Could not read browser storage. The change was not applied.",
-      );
-    // Storage can be denied by browser settings; fall back to an empty day.
-    return empty;
+    throw new Error(
+      "Could not read existing timer data. It was left unchanged so it can be recovered manually.",
+    );
   }
-  if (!raw) return empty;
 
-  try {
-    const parsed = JSON.parse(raw) as Partial<StoredPayload>;
-    if (
-      parsed.version !== 1 ||
-      typeof parsed.dateKey !== "string" ||
-      !Array.isArray(parsed.events) ||
-      !parsed.events.every(isTimerEvent)
-    ) {
-      return empty;
-    }
-
-    if (parsed.dateKey !== today && currentState(parsed.events) === "stopped") {
-      return empty;
-    }
-
-    return { dateKey: parsed.dateKey, events: parsed.events };
-  } catch {
-    return empty;
-  }
-}
-
-export function saveWorkday(dateKey: string, events: TimerEvent[]): void {
-  const payload: StoredPayload = { version: 1, dateKey, events };
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  return raw === null ? null : parseLegacyWorkday(raw);
 }
