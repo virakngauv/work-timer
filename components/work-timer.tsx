@@ -54,6 +54,7 @@ export function WorkTimer() {
   const [now, setNow] = useState(() => Date.now());
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const displayedError = actionError ?? workday.error;
   // The server snapshot has an empty dateKey until the client store attaches.
   const hydrated = dayKey !== "";
 
@@ -206,9 +207,9 @@ export function WorkTimer() {
           a fresh current session.
         </p>
 
-        {actionError ? (
+        {displayedError ? (
           <p role="alert" className="mt-2 text-sm font-medium text-red-600">
-            {actionError}
+            {displayedError}
           </p>
         ) : null}
       </section>
