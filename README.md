@@ -26,7 +26,7 @@ The first implementation is intentionally local-first:
 
 - Next.js App Router + React + strict TypeScript
 - Tailwind CSS
-- Browser localStorage for the MVP
+- Browser IndexedDB for the MVP
 - Explicit state-transition events as the canonical data
 - Derived work/break intervals for display and totals
 - Vitest + React Testing Library for unit/component tests
@@ -74,7 +74,11 @@ If the requested port is busy, the dev script probes the next ports (up to ten) 
 
 ## Persistence
 
-The MVP stores a single workday event stream in browser localStorage. Clearing site data clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
+The MVP stores workday metadata and individual transition events in browser IndexedDB. Clearing site data clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
+
+Every timer action and boundary edit runs in one IndexedDB `readwrite` transaction that reads the latest event history, validates the explicit action, and writes only the resulting event change. Overlapping write transactions are serialized by IndexedDB, so cooperating tabs do not rely on cached React state or localStorage visibility for correctness. Repeated requests for the current mode do nothing; incompatible stale requests show an error.
+
+A BroadcastChannel only tells other tabs to reread IndexedDB so their UI stays current. Tabs also reread when opened or returned to, so missed notifications do not affect correctness. Existing valid `work-timer:v1` localStorage data is migrated once; malformed legacy data is preserved and reported instead of being replaced.
 
 ## Repository setup status
 

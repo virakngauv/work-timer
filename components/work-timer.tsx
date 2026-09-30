@@ -4,23 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SessionTable } from "@/components/session-table";
 import {
-  appendTransition,
   calculateTotals,
   currentState,
-  editEventTimestamp,
   formatDuration,
-  type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
-import { localDateKey } from "@/lib/storage";
-import { useWorkday, writeWorkday } from "@/lib/workday-store";
-
-function createId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  );
-}
+import {
+  useWorkday,
+  dispatchWorkday,
+  type WorkdayAction,
+} from "@/lib/workday-store";
 
 function MetricCard({
   label,
@@ -60,6 +53,8 @@ export function WorkTimer() {
   const dayKey = workday.dateKey;
   const [now, setNow] = useState(() => Date.now());
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const displayedError = actionError ?? workday.error;
   // The server snapshot has an empty dateKey until the client store attaches.
   const hydrated = dayKey !== "";
 
@@ -71,67 +66,45 @@ export function WorkTimer() {
   const totals = useMemo(() => calculateTotals(events, now), [events, now]);
   const state = currentState(events);
 
-  function persistEvents(nextEvents: TimerEvent[], dateKey = dayKey): boolean {
+  async function performAction(action: WorkdayAction): Promise<string | null> {
+    setPending(true);
     try {
-      writeWorkday({ dateKey, events: nextEvents });
+      await dispatchWorkday(action);
+      setNow(Date.now());
       setActionError(null);
-      return true;
-    } catch {
-      // Nothing was published, so the UI still shows the stored state.
-      setActionError(
-        "Could not save to browser storage. The change was not applied.",
-      );
-      return false;
+      return null;
+    } catch (error) {
+      return error instanceof Error
+        ? error.message
+        : "Could not update the timer.";
+    } finally {
+      setPending(false);
     }
   }
 
-  function transition(next: TimerState) {
-    const timestamp = Date.now();
-    const persisted = persistEvents(
-      appendTransition(events, next, timestamp, createId()),
+  async function transition(next: TimerState) {
+    setActionError(
+      await performAction({ type: "transition", from: state, state: next }),
     );
-    if (!persisted) return;
-    setNow(timestamp);
   }
 
   function startDay() {
-    const timestamp = Date.now();
-    const today = localDateKey(timestamp);
-
-    if (dayKey !== today) {
-      const persisted = persistEvents(
-        appendTransition([], "work", timestamp, createId()),
-        today,
-      );
-      if (!persisted) return;
-      setNow(timestamp);
-      return;
-    }
-
-    transition("work");
+    return transition("work");
   }
 
   function toggleMode() {
-    if (state === "work") transition("break");
-    if (state === "break") transition("work");
+    return transition(state === "work" ? "break" : "work");
   }
 
   function stopDay() {
-    if (state === "work" || state === "break") transition("stopped");
+    return transition("stopped");
   }
 
-  function changeTimestamp(eventId: string, timestamp: number): string | null {
-    if (timestamp > Date.now()) return "A session cannot start in the future.";
-
-    try {
-      writeWorkday({
-        dateKey: dayKey,
-        events: editEventTimestamp(events, eventId, timestamp),
-      });
-      return null;
-    } catch (error) {
-      return error instanceof Error ? error.message : "Could not update time.";
-    }
+  function changeTimestamp(
+    eventId: string,
+    timestamp: number,
+  ): Promise<string | null> {
+    return performAction({ type: "edit", eventId, at: timestamp });
   }
 
   const currentLabel = state === "break" ? "Current Break" : "Current Session";
@@ -203,7 +176,7 @@ export function WorkTimer() {
               variant="primary"
               className="flex-1 text-lg"
               onClick={startDay}
-              disabled={!hydrated}
+              disabled={!hydrated || pending}
             >
               Start Day
             </Button>
@@ -213,6 +186,7 @@ export function WorkTimer() {
                 variant="primary"
                 className="flex-1 text-lg"
                 onClick={toggleMode}
+                disabled={pending}
               >
                 {state === "work" ? "Switch to Break" : "Back to Work"}
               </Button>
@@ -220,6 +194,7 @@ export function WorkTimer() {
                 variant="danger"
                 className="sm:min-w-40"
                 onClick={stopDay}
+                disabled={pending}
               >
                 Stop Day
               </Button>
@@ -232,9 +207,9 @@ export function WorkTimer() {
           a fresh current session.
         </p>
 
-        {actionError ? (
+        {displayedError ? (
           <p role="alert" className="mt-2 text-sm font-medium text-red-600">
-            {actionError}
+            {displayedError}
           </p>
         ) : null}
       </section>
@@ -244,6 +219,7 @@ export function WorkTimer() {
           events={events}
           now={now}
           onChangeTimestamp={changeTimestamp}
+          pending={pending}
         />
       </div>
     </main>

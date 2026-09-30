@@ -14,13 +14,18 @@ import { Button } from "@/components/ui/button";
 interface SessionTableProps {
   events: TimerEvent[];
   now: number;
-  onChangeTimestamp: (eventId: string, timestamp: number) => string | null;
+  onChangeTimestamp: (
+    eventId: string,
+    timestamp: number,
+  ) => Promise<string | null>;
+  pending: boolean;
 }
 
 export function SessionTable({
   events,
   now,
   onChangeTimestamp,
+  pending,
 }: SessionTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -52,7 +57,7 @@ export function SessionTable({
     setError(null);
   }
 
-  function save() {
+  async function save() {
     if (!editingId) return;
     const timestamp = fromLocalDateTimeInput(draft);
     if (!Number.isFinite(timestamp)) {
@@ -60,7 +65,7 @@ export function SessionTable({
       return;
     }
 
-    const result = onChangeTimestamp(editingId, timestamp);
+    const result = await onChangeTimestamp(editingId, timestamp);
     if (result) {
       setError(result);
       return;
@@ -134,6 +139,7 @@ export function SessionTable({
                     </td>
                     <td className="px-5 py-4 text-right sm:px-7">
                       <Button
+                        disabled={pending}
                         variant="ghost"
                         aria-expanded={editingId === segment.eventId}
                         onClick={() => openEditor(segment.eventId)}
@@ -162,6 +168,7 @@ export function SessionTable({
                           <div className="flex flex-wrap gap-2">
                             {[-5, -1, 1, 5].map((minutes) => (
                               <Button
+                                disabled={pending}
                                 key={minutes}
                                 variant="secondary"
                                 onClick={() => adjust(minutes)}
@@ -178,6 +185,7 @@ export function SessionTable({
                             </span>
                             <input
                               type="datetime-local"
+                              disabled={pending}
                               value={draft}
                               onChange={(event) => {
                                 setDraft(event.target.value);
@@ -197,10 +205,15 @@ export function SessionTable({
                           ) : null}
 
                           <div className="flex gap-2">
-                            <Button variant="primary" onClick={save}>
+                            <Button
+                              variant="primary"
+                              onClick={save}
+                              disabled={pending}
+                            >
                               Save
                             </Button>
                             <Button
+                              disabled={pending}
                               variant="ghost"
                               onClick={() => {
                                 setEditingId(null);
