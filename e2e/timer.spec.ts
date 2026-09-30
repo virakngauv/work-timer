@@ -16,6 +16,15 @@ async function seedLegacyStorage(
   }, raw);
 }
 
+async function suppressBroadcastNotifications(
+  context: BrowserContext,
+): Promise<void> {
+  await context.addInitScript(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    BroadcastChannel.prototype.postMessage = () => {};
+  });
+}
+
 async function readIndexedWorkday(page: Page): Promise<IndexedWorkday> {
   return page.evaluate(
     () =>
@@ -135,6 +144,7 @@ test("simultaneous stale-tab requests serialize without duplicate transitions", 
   context,
   page,
 }) => {
+  await suppressBroadcastNotifications(context);
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
   await expect(page.getByText("WORK MODE")).toBeVisible();
@@ -159,6 +169,7 @@ test("a boundary edit racing another tab's transition keeps both writes", async 
   context,
   page,
 }) => {
+  await suppressBroadcastNotifications(context);
   await page.goto("/");
   await page.getByRole("button", { name: "Start Day" }).click();
   await expect(page.getByText("WORK MODE")).toBeVisible();
