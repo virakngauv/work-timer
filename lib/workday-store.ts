@@ -1,63 +1,96 @@
 import { useSyncExternalStore } from "react";
-import {
-  appendTransition,
-  currentState,
-  editEventTimestamp,
-  type TimerState,
-} from "@/lib/timer";
-import {
-  loadWorkday,
-  saveWorkday,
-  STORAGE_KEY,
-  type PersistedWorkday,
-} from "@/lib/storage";
+import { readWorkday, transactWorkday } from "@/lib/workday-db";
+import type { PersistedWorkday } from "@/lib/storage";
+import type { WorkdayAction } from "@/lib/workday-actions";
 
+export type { WorkdayAction } from "@/lib/workday-actions";
+
+interface WorkdaySnapshot extends PersistedWorkday {
+  error: string | null;
+}
+
+const CHANGE_CHANNEL = "work-timer:changes:v1";
 const listeners = new Set<() => void>();
-const WRITE_LOCK = "work-timer:write";
-let snapshot: PersistedWorkday | null = null;
+const SERVER_SNAPSHOT: WorkdaySnapshot = {
+  dateKey: "",
+  events: [],
+  error: null,
+};
+let snapshot: WorkdaySnapshot = SERVER_SNAPSHOT;
+let channel: BroadcastChannel | null = null;
 
-// Server render has no localStorage; the empty dateKey keeps the UI inert
-// until the client store attaches and useSyncExternalStore re-renders.
-const SERVER_SNAPSHOT: PersistedWorkday = { dateKey: "", events: [] };
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Could not read timer data.";
+}
 
 function emitChange(): void {
   for (const listener of listeners) listener();
 }
 
-function handleStorage(event: StorageEvent): void {
-  if (event.storageArea && event.storageArea !== window.localStorage) return;
-  if (event.key !== STORAGE_KEY && event.key !== null) return;
-  snapshot = null;
+async function refreshWorkday(): Promise<void> {
+  try {
+    const workday = await readWorkday();
+    snapshot = { ...workday, error: null };
+  } catch (error) {
+    snapshot = { ...snapshot, error: errorMessage(error) };
+  }
   emitChange();
+}
+
+function handleVisibilityChange(): void {
+  if (!document.hidden) void refreshWorkday();
+}
+
+function handleReturnToPage(): void {
+  void refreshWorkday();
+}
+
+function openChangeChannel(): BroadcastChannel | null {
+  if (channel || typeof BroadcastChannel === "undefined") return channel;
+  channel = new BroadcastChannel(CHANGE_CHANNEL);
+  channel.addEventListener("message", handleReturnToPage);
+  return channel;
+}
+
+function closeChangeChannel(): void {
+  if (!channel) return;
+  channel.close();
+  channel = null;
 }
 
 export function subscribeToWorkday(listener: () => void): () => void {
   if (listeners.size === 0) {
-    // Reload on first subscription so changes made while nothing was
-    // mounted (or in another tab) are picked up.
-    snapshot = null;
-    window.addEventListener("storage", handleStorage);
+    openChangeChannel();
+    window.addEventListener("focus", handleReturnToPage);
+    window.addEventListener("pageshow", handleReturnToPage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    void refreshWorkday();
   }
   listeners.add(listener);
 
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0) {
-      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleReturnToPage);
+      window.removeEventListener("pageshow", handleReturnToPage);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+      closeChangeChannel();
     }
   };
 }
 
-export function getWorkdaySnapshot(): PersistedWorkday {
-  snapshot ??= loadWorkday();
+export function getWorkdaySnapshot(): WorkdaySnapshot {
   return snapshot;
 }
 
-export function getServerWorkdaySnapshot(): PersistedWorkday {
+export function getServerWorkdaySnapshot(): WorkdaySnapshot {
   return SERVER_SNAPSHOT;
 }
 
-export function useWorkday(): PersistedWorkday {
+export function useWorkday(): WorkdaySnapshot {
   return useSyncExternalStore(
     subscribeToWorkday,
     getWorkdaySnapshot,
@@ -65,70 +98,14 @@ export function useWorkday(): PersistedWorkday {
   );
 }
 
-export type WorkdayAction =
-  | { type: "transition"; from: TimerState; state: TimerState }
-  | { type: "edit"; eventId: string; at: number };
-
 export async function dispatchWorkday(action: WorkdayAction): Promise<void> {
-  if (!navigator.locks) {
-    throw new Error(
-      "This browser cannot safely save changes across tabs. Use a browser with Web Locks support.",
-    );
+  const now = Date.now();
+  const result = await transactWorkday(action, now);
+  snapshot = { ...result.workday, error: null };
+  emitChange();
+
+  if (result.changed) {
+    openChangeChannel()?.postMessage({ type: "changed" });
   }
-
-  await navigator.locks.request(WRITE_LOCK, () => {
-    // Read inside the lock: a cached snapshot may predate another tab's write.
-    const latest = loadWorkday(true);
-    let next = latest;
-    let committed = latest;
-    try {
-      if (action.type === "transition") {
-        const state = currentState(latest.events);
-        if (state !== action.state) {
-          if (state !== action.from) {
-            throw new Error(
-              "The timer changed in another tab. Check its current mode and try again.",
-            );
-          }
-          const at = Math.max(
-            Date.now(),
-            (latest.events.at(-1)?.at ?? -Infinity) + 1,
-          );
-          next = {
-            ...latest,
-            events: appendTransition(
-              latest.events,
-              action.state,
-              at,
-              crypto.randomUUID(),
-            ),
-          };
-        }
-      } else {
-        if (!Number.isFinite(action.at))
-          throw new Error("Enter a valid date and time.");
-        if (action.at > Date.now())
-          throw new Error("A session cannot start in the future.");
-        next = {
-          ...latest,
-          events: editEventTimestamp(latest.events, action.eventId, action.at),
-        };
-      }
-
-      if (next !== latest) {
-        try {
-          saveWorkday(next.dateKey, next.events);
-          committed = next;
-        } catch {
-          throw new Error(
-            "Could not save to browser storage. The change was not applied.",
-          );
-        }
-      }
-    } finally {
-      // Publish only persisted data, including on a stale-action validation error.
-      snapshot = committed;
-      emitChange();
-    }
-  });
+  if (result.error) throw result.error;
 }
