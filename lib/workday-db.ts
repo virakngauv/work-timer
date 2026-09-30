@@ -152,9 +152,7 @@ function readStoredWorkday(database: IDBDatabase): Promise<PersistedWorkday> {
       [META_STORE, EVENTS_STORE],
       "readonly",
     );
-    const metaRequest = transaction
-      .objectStore(META_STORE)
-      .get(META_KEY);
+    const metaRequest = transaction.objectStore(META_STORE).get(META_KEY);
     const eventsRequest = transaction.objectStore(EVENTS_STORE).getAll();
 
     transaction.oncomplete = () => {
