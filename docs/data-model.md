@@ -31,7 +31,7 @@ For event i:
     segment.end = event[i + 1].at
     segment.mode = event[i].state
 
-If the final event is work or break, its end is Now. If the final event is stopped, there is no active interval.
+If the final event is work or break, its end is null (displayed as a dash); its elapsed duration uses the current timestamp. If the final event is stopped, there is no active interval.
 
 ## Why not canonical start/end rows?
 
@@ -56,20 +56,15 @@ Transition events store that boundary once. Interval rows are still the right pr
       state: TimerState;
     }
 
-The local MVP exposes one ordered event stream plus a local-calendar `dateKey` identifying the workday. IndexedDB persists the transition events as individual records and keeps the current workday metadata separately.
+The local MVP exposes one continuous ordered event stream. IndexedDB persists each transition event individually. There is no calendar-date key, day grouping, or automatic filtering/resetting.
 
-## Workday rollover
-
-- Starting on a date creates that date's workday.
-- Stopping does not erase the day's history; the user can resume later the same day.
-- If the stored workday is stopped and the calendar date has advanced, loading the app begins with a fresh empty day.
-- If a session is still active across midnight, the active workday is preserved until the user stops it. A future cloud-backed version can add a more sophisticated rollover policy if needed.
+Stopping ends accumulation without erasing history. Starting again appends a work or break event, even on a later date. An active session can span midnight. Totals include every retained session; stopped gaps do not accumulate.
 
 ## Invariants
 
 - Events are strictly chronological.
-- The first event must be work.
-- After stopped, the only allowed next state is work.
+- The first event may be work or break.
+- After stopped, the next state may be work or break.
 - Work may transition only to break or stopped.
 - Break may transition only to work or stopped.
 - Consecutive duplicate states are invalid.
@@ -77,23 +72,23 @@ The local MVP exposes one ordered event stream plus a local-calendar `dateKey` i
 
 ## Derived values
 
-Today's Work:
+Work Total:
 
     sum(duration of every work segment)
 
-Break Today:
+Break Total:
 
     sum(duration of every break segment)
 
-Current Session / Current Break:
+Work Session / Break Session:
 
-    now - timestamp of the final event
+    whole-second now - whole-second timestamp of the final event
 
 only when the final event is work or break.
 
 ## Editing
 
-The History table displays interval rows, but editing Started modifies the timestamp of that row's source transition event.
+The history table displays newest sessions first. Editing Started modifies the timestamp of the row's source transition event. Editing Ended modifies the following transition event, which also changes the next session's start when they are adjacent. An active session has no end timestamp to edit.
 
 For adjacent work/break segments, this changes both:
 
@@ -110,11 +105,9 @@ The UI should offer common relative corrections (-5, -1, +1, +5 minutes) and an 
 
 Browser IndexedDB:
 
-- one `meta` record identifies the current workday with its local-calendar `dateKey`
 - one `events` object store persists each explicit transition event by ID
-- each timer action or boundary edit reads the latest metadata and events, validates the explicit action, and writes the resulting change in one `readwrite` transaction
+- each timer action, boundary edit, or explicit clear reads the latest events, validates the explicit action, and writes the resulting change in one `readwrite` transaction
 - BroadcastChannel notifications make other tabs reread IndexedDB; correctness does not depend on receiving a notification
-- valid legacy `work-timer:v1` localStorage data migrates once, while unreadable legacy data is preserved and reported
 
 Benefits:
 
@@ -123,27 +116,25 @@ Benefits:
 - instant local startup
 - atomic cross-tab mutations for a personal single-device tool
 
+Explicit clearing requires stopped, unchanged history and runs atomically in the same transaction.
+
 Tradeoff: clearing site data removes history and there is no device sync.
 
 ### Future Convex model
 
 Only add this when cloud persistence or accounts are required.
 
-Potential tables:
-
-    workdays
-      ownerId
-      startedAt
-      timezone
-      createdAt
+Potential table:
 
     timerEvents
-      workdayId
+      ownerId
       at
       state
       createdAt
       updatedAt
 
-The backend must validate transition rules and timestamp ordering. Authorization must ensure a user can only mutate their own workdays/events.
+The backend must validate transition rules and timestamp ordering. Authorization must ensure a user can only mutate their own events.
 
 If multi-device edits are introduced, define conflict behavior before implementation rather than relying on last-write-wins accidentally.
+
+Elapsed durations are calculated by truncating each boundary and the current time to whole seconds before subtraction. Totals sum these whole-second intervals so the current session and its mode total tick together. Event timestamps retain precise ordering for rapid transitions.

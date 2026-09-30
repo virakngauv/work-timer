@@ -7,6 +7,10 @@ export interface TimerEvent {
   state: TimerState;
 }
 
+export interface TimerHistory {
+  events: TimerEvent[];
+}
+
 export interface TimerSegment {
   eventId: string;
   state: ActiveTimerState;
@@ -31,8 +35,9 @@ export function canTransition(
   previous: TimerState | null,
   next: TimerState,
 ): boolean {
-  if (previous === null) return next === "work";
-  if (previous === "stopped") return next === "work";
+  if (previous === null || previous === "stopped") {
+    return next === "work" || next === "break";
+  }
   if (previous === "work") return next === "break" || next === "stopped";
   return next === "work" || next === "stopped";
 }
@@ -75,7 +80,13 @@ export function deriveSegments(
         state: event.state,
         startedAt: event.at,
         endedAt,
-        durationMs: Math.max(0, effectiveEnd - event.at),
+        // Quantize shared boundaries before subtraction so all active counters
+        // advance together, without accumulating fractional seconds from history.
+        durationMs:
+          Math.max(
+            0,
+            Math.floor(effectiveEnd / 1000) - Math.floor(event.at / 1000),
+          ) * 1000,
         active: endedAt === null,
       },
     ];
@@ -97,8 +108,7 @@ export function calculateTotals(
     .filter((segment) => segment.state === "break")
     .reduce((total, segment) => total + segment.durationMs, 0);
 
-  const currentMs =
-    state === "stopped" ? 0 : Math.max(0, now - (events.at(-1)?.at ?? now));
+  const currentMs = segments.find((segment) => segment.active)?.durationMs ?? 0;
 
   return { workMs, breakMs, currentMs, state };
 }
@@ -138,6 +148,11 @@ export function formatDuration(ms: number): string {
     .join(":");
 }
 
+export function formatSessionDuration(ms: number): string {
+  const formatted = formatDuration(ms);
+  return ms < 3_600_000 ? formatted.slice(3) : formatted;
+}
+
 export function formatClockTime(ms: number): string {
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
@@ -145,10 +160,37 @@ export function formatClockTime(ms: number): string {
   }).format(new Date(ms));
 }
 
+export function formatTimeRange(
+  start: number,
+  end: number | null,
+  locale?: string,
+): string {
+  const formatter = new Intl.DateTimeFormat(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  if (end === null) return `${formatter.format(start)} –`;
+  const startParts = formatter.formatToParts(start);
+  const endParts = formatter.formatToParts(end);
+  const startPeriod = startParts.find(
+    (part) => part.type === "dayPeriod",
+  )?.value;
+  const endPeriod = endParts.find((part) => part.type === "dayPeriod")?.value;
+  const startText =
+    startPeriod && startPeriod === endPeriod
+      ? startParts
+          .filter((part) => part.type !== "dayPeriod")
+          .map((part) => part.value)
+          .join("")
+          .trim()
+      : formatter.format(start);
+  return `${startText} – ${formatter.format(end)}`;
+}
+
 export function toLocalDateTimeInput(ms: number): string {
   const date = new Date(ms);
   const local = new Date(ms - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+  return local.toISOString().slice(0, 19);
 }
 
 export function fromLocalDateTimeInput(value: string): number {

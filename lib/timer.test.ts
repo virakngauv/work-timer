@@ -4,10 +4,24 @@ import {
   calculateTotals,
   deriveSegments,
   editEventTimestamp,
+  formatSessionDuration,
+  formatTimeRange,
   type TimerEvent,
 } from "@/lib/timer";
 
 describe("timer domain", () => {
+  it.each([
+    [0, "00:00"],
+    [59_999, "00:59"],
+    [60_000, "01:00"],
+    [3_599_999, "59:59"],
+    [3_600_000, "01:00:00"],
+    [5_400_000, "01:30:00"],
+    [5_459_999, "01:30:59"],
+  ])("formats a session lasting %i ms as %s", (ms, expected) => {
+    expect(formatSessionDuration(ms)).toBe(expected);
+  });
+
   it("derives work and break intervals from explicit state transitions", () => {
     const events: TimerEvent[] = [
       { id: "1", at: 0, state: "work" },
@@ -69,5 +83,42 @@ describe("timer domain", () => {
         3_000,
       ),
     ).toThrow();
+  });
+  it.each(["work", "break"] as const)(
+    "ticks current and %s total together at whole-second boundaries",
+    (state) => {
+      const other = state === "work" ? "break" : "work";
+      const events: TimerEvent[] = [
+        { id: "first", state, at: 100 },
+        { id: "other", state: other, at: 1800 },
+        { id: "current", state, at: 2300 },
+      ];
+      const totalKey = state === "work" ? "workMs" : "breakMs";
+      const before = calculateTotals(events, 2900);
+      expect(before.currentMs).toBe(0);
+      expect(before[totalKey]).toBe(1000);
+      const tick = calculateTotals(events, 3000);
+      expect(tick.currentMs - before.currentMs).toBe(1000);
+      expect(tick[totalKey] - before[totalKey]).toBe(1000);
+      expect(calculateTotals(events, 3999)).toEqual(tick);
+      expect(
+        deriveSegments(events, 3999).every(
+          (segment) => segment.durationMs % 1000 === 0,
+        ),
+      ).toBe(true);
+    },
+  );
+  it("compacts shared AM/PM but keeps different periods and unfinished ranges clear", () => {
+    const start = new Date(2026, 0, 15, 15, 40).getTime();
+    expect(
+      formatTimeRange(start, new Date(2026, 0, 15, 15, 53).getTime(), "en-US"),
+    ).toMatch(/^3:40 – 3:53\sPM$/);
+    expect(
+      formatTimeRange(new Date(2026, 0, 15, 11, 40).getTime(), start, "en-US"),
+    ).toMatch(/^11:40\sAM – 3:40\sPM$/);
+    expect(formatTimeRange(start, null, "en-US")).toMatch(/^3:40\sPM –$/);
+    expect(formatTimeRange(start, start + 13 * 60_000, "en-GB")).toBe(
+      "15:40 – 15:53",
+    );
   });
 });

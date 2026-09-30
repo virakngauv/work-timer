@@ -1,32 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SessionTable } from "@/components/session-table";
 import {
   calculateTotals,
   currentState,
   formatDuration,
+  type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
-import {
-  useWorkday,
-  dispatchWorkday,
-  type WorkdayAction,
-} from "@/lib/workday-store";
+import { useTimer, dispatchTimer, type TimerAction } from "@/lib/timer-store";
+
+function durationLabel(value: string): string {
+  const [hours, minutes, seconds] = value.split(":").map(Number);
+  return `${hours} hours, ${minutes} minutes, ${seconds} seconds`;
+}
 
 function MetricCard({
   label,
   value,
-  description,
   active,
   tone,
+  prominent = false,
 }: {
   label: string;
   value: string;
-  description: string;
   active?: boolean;
   tone: "work" | "break" | "neutral";
+  prominent?: boolean;
 }) {
   const toneClasses = {
     work: active
@@ -37,26 +39,75 @@ function MetricCard({
   };
 
   return (
-    <div className={`rounded-3xl border p-5 sm:p-6 ${toneClasses[tone]}`}>
+    <div
+      className={`@container min-w-0 rounded-2xl border ${prominent ? "current-metric" : "total-metric"} ${toneClasses[tone]}`}
+    >
       <div className="text-sm font-semibold text-slate-700">{label}</div>
-      <div className="mt-1 text-xs text-slate-500">{description}</div>
-      <div className="tabular mt-4 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-        {value}
+      <div
+        className={`timer-value tabular ${prominent ? "current-value" : "total-value"}`}
+        role={prominent ? "timer" : undefined}
+        aria-live={prominent ? "off" : undefined}
+        aria-label={`${label}: ${durationLabel(value)}`}
+      >
+        {value.split(":").map((part, index) => (
+          <span key={index}>
+            {part}
+            {index < 2 ? ":" : ""}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
 export function WorkTimer() {
-  const workday = useWorkday();
-  const events = workday.events;
-  const dayKey = workday.dateKey;
+  const history = useTimer();
+  const events = history.events;
   const [now, setNow] = useState(() => Date.now());
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const displayedError = actionError ?? workday.error;
-  // The server snapshot has an empty dateKey until the client store attaches.
-  const hydrated = dayKey !== "";
+  const [clearEvents, setClearEvents] = useState<TimerEvent[] | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
+  const clearDialogRef = useRef<HTMLDialogElement>(null);
+  const cancelClearRef = useRef<HTMLButtonElement>(null);
+  const clearTriggerRef = useRef<HTMLButtonElement>(null);
+  const restoreClearFocusRef = useRef(false);
+  const clearedRef = useRef(false);
+  const startWorkRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (clearEvents && !clearDialogRef.current?.open) {
+      clearDialogRef.current?.showModal();
+      cancelClearRef.current?.focus();
+    }
+  }, [clearEvents]);
+
+  useEffect(() => {
+    if (!clearEvents && !pending && restoreClearFocusRef.current) {
+      (clearedRef.current ? startWorkRef : clearTriggerRef).current?.focus();
+      restoreClearFocusRef.current = false;
+    }
+  }, [clearEvents, pending]);
+
+  function closeClearDialog(cleared = false) {
+    restoreClearFocusRef.current = true;
+    clearedRef.current = cleared;
+    clearDialogRef.current?.close();
+    setClearEvents(null);
+    setClearError(null);
+  }
+
+  async function clearTimers() {
+    if (!clearEvents) return;
+    const error = await performAction({
+      type: "clear",
+      expectedEvents: clearEvents,
+    });
+    if (error) setClearError(error);
+    else closeClearDialog(true);
+  }
+
+  const displayedError = actionError ?? history.error;
+  const hydrated = history.initialized;
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250);
@@ -66,10 +117,10 @@ export function WorkTimer() {
   const totals = useMemo(() => calculateTotals(events, now), [events, now]);
   const state = currentState(events);
 
-  async function performAction(action: WorkdayAction): Promise<string | null> {
+  async function performAction(action: TimerAction): Promise<string | null> {
     setPending(true);
     try {
-      await dispatchWorkday(action);
+      await dispatchTimer(action);
       setNow(Date.now());
       setActionError(null);
       return null;
@@ -88,15 +139,19 @@ export function WorkTimer() {
     );
   }
 
-  function startDay() {
+  function startWork() {
     return transition("work");
+  }
+
+  function startBreak() {
+    return transition("break");
   }
 
   function toggleMode() {
     return transition(state === "work" ? "break" : "work");
   }
 
-  function stopDay() {
+  function stopTimer() {
     return transition("stopped");
   }
 
@@ -107,84 +162,87 @@ export function WorkTimer() {
     return performAction({ type: "edit", eventId, at: timestamp });
   }
 
-  const currentLabel = state === "break" ? "Current Break" : "Current Session";
-  const currentDescription =
-    state === "stopped" ? "No active session" : "Time since last switch";
+  const currentLabel =
+    state === "break"
+      ? "Break Session"
+      : state === "work"
+        ? "Work Session"
+        : "Stopped";
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <header className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-emerald-700">
-            Work Timer
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-            Focus without forced interruptions
-          </h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Switch between work and break when it feels natural. Correct a
-            missed switch later without manually rebalancing totals.
-          </p>
-        </div>
-
-        <span
-          className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-sm font-bold ${
-            state === "work"
-              ? "bg-emerald-100 text-emerald-800"
-              : state === "break"
-                ? "bg-sky-100 text-sky-800"
-                : "bg-slate-200 text-slate-700"
-          }`}
-        >
-          {state === "work"
-            ? "WORK MODE"
-            : state === "break"
-              ? "BREAK MODE"
-              : "STOPPED"}
-        </span>
+    <main className="mx-auto min-h-screen w-full max-w-3xl p-[clamp(12px,3vw,24px)]">
+      <header className="mb-3">
+        <h1 className="text-xs font-semibold text-slate-500">Work Timer</h1>
       </header>
 
-      <section className="rounded-[2rem] border border-slate-200 bg-white/85 p-4 shadow-xl shadow-slate-200/50 backdrop-blur sm:p-6">
+      <section className="rounded-3xl border border-slate-200 bg-white/85 p-[clamp(12px,3vw,24px)] shadow-xl shadow-slate-200/50 backdrop-blur">
         <MetricCard
-          label="Today's Work"
-          description="Total focused time"
-          value={formatDuration(totals.workMs)}
-          active={state === "work"}
-          tone="work"
+          label={currentLabel}
+          prominent
+          value={formatDuration(totals.currentMs)}
+          active={state !== "stopped"}
+          tone={state === "break" ? "break" : "work"}
         />
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <MetricCard
-            label={currentLabel}
-            description={currentDescription}
-            value={formatDuration(totals.currentMs)}
-            active={state !== "stopped"}
-            tone={state === "break" ? "break" : "work"}
-          />
-          <MetricCard
-            label="Break Today"
-            description="Total break time"
-            value={formatDuration(totals.breakMs)}
-            active={state === "break"}
-            tone="break"
-          />
+        <div className="totals-grid">
+          <button
+            type="button"
+            className="min-w-0 rounded-2xl text-left enabled:cursor-pointer disabled:cursor-default"
+            aria-label={`Work Total: ${durationLabel(formatDuration(totals.workMs))}. ${state === "work" ? "Currently working" : "Start work"}`}
+            disabled={!hydrated || pending || state === "work"}
+            onClick={() => transition("work")}
+          >
+            <MetricCard
+              label="Work Total"
+              value={formatDuration(totals.workMs)}
+              active={state === "work"}
+              tone="work"
+            />
+          </button>
+          <button
+            type="button"
+            className="min-w-0 rounded-2xl text-left enabled:cursor-pointer disabled:cursor-default"
+            aria-label={`Break Total: ${durationLabel(formatDuration(totals.breakMs))}. ${state === "break" ? "Currently on break" : "Start break"}`}
+            disabled={!hydrated || pending || state === "break"}
+            onClick={() => transition("break")}
+          >
+            <MetricCard
+              label="Break Total"
+              value={formatDuration(totals.breakMs)}
+              active={state === "break"}
+              tone="break"
+            />
+          </button>
         </div>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <div
+          className={`timer-actions ${state === "stopped" ? "start-actions" : "running-actions"}`}
+        >
           {state === "stopped" ? (
-            <Button
-              variant="primary"
-              className="flex-1 text-lg"
-              onClick={startDay}
-              disabled={!hydrated || pending}
-            >
-              Start Day
-            </Button>
+            <>
+              <Button
+                ref={startWorkRef}
+                variant="primary"
+                className="min-w-0"
+                onClick={startWork}
+                disabled={!hydrated || pending}
+              >
+                Start Work
+              </Button>
+              <Button
+                variant="break"
+                className="min-w-0"
+                onClick={startBreak}
+                disabled={!hydrated || pending}
+              >
+                Start Break
+              </Button>
+            </>
           ) : (
             <>
               <Button
-                variant="primary"
-                className="flex-1 text-lg"
+                variant={state === "work" ? "break" : "primary"}
+                className="mode-action min-w-0 flex-1"
                 onClick={toggleMode}
                 disabled={pending}
               >
@@ -192,20 +250,32 @@ export function WorkTimer() {
               </Button>
               <Button
                 variant="danger"
-                className="sm:min-w-40"
-                onClick={stopDay}
+                className="stop-action"
+                onClick={stopTimer}
                 disabled={pending}
               >
-                Stop Day
+                Stop
               </Button>
             </>
           )}
         </div>
 
-        <p className="mt-4 text-sm text-slate-500">
-          Every mode switch creates one timestamped state transition and starts
-          a fresh current session.
-        </p>
+        {state === "stopped" && events.length > 0 ? (
+          <div className="mt-2 flex justify-end">
+            <Button
+              ref={clearTriggerRef}
+              variant="ghost"
+              aria-haspopup="dialog"
+              disabled={!hydrated || pending}
+              onClick={() => {
+                setClearEvents([...events]);
+                setClearError(null);
+              }}
+            >
+              Clear timers
+            </Button>
+          </div>
+        ) : null}
 
         {displayedError ? (
           <p role="alert" className="mt-2 text-sm font-medium text-red-600">
@@ -214,7 +284,57 @@ export function WorkTimer() {
         ) : null}
       </section>
 
-      <div className="mt-6">
+      <dialog
+        ref={clearDialogRef}
+        className="session-dialog"
+        aria-labelledby="clear-dialog-title"
+        aria-describedby="clear-dialog-description"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (!pending) closeClearDialog();
+        }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget || pending) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom
+          )
+            closeClearDialog();
+        }}
+      >
+        <div className="flex flex-col gap-4">
+          <h2 id="clear-dialog-title" className="text-lg font-semibold">
+            Clear all timers?
+          </h2>
+          <p id="clear-dialog-description" className="text-sm text-slate-600">
+            This deletes all session history and resets Work and Break totals to
+            zero. This cannot be undone.
+          </p>
+          {clearError ? (
+            <p role="alert" className="text-sm font-medium text-red-700">
+              {clearError}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              ref={cancelClearRef}
+              variant="secondary"
+              disabled={pending}
+              onClick={() => closeClearDialog()}
+            >
+              Cancel
+            </Button>
+            <Button variant="danger" disabled={pending} onClick={clearTimers}>
+              Clear timers
+            </Button>
+          </div>
+        </div>
+      </dialog>
+
+      <div className="mt-4">
         <SessionTable
           events={events}
           now={now}

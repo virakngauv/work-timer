@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Work Timer",
-  description: "Flexible work and break tracking without forced interruptions.",
+  description: "Track work and break time.",
 };
 
 export default function RootLayout({
