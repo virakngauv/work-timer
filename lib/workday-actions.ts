@@ -33,11 +33,18 @@ export function visibleWorkday(
   return workday;
 }
 
+function createEventId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
+}
+
 export function applyWorkdayAction(
   latest: PersistedWorkday,
   action: WorkdayAction,
   now: number,
-  createId: () => string = () => crypto.randomUUID(),
+  createId: () => string = createEventId,
 ): AppliedWorkdayAction {
   if (action.type === "edit") {
     if (!Number.isFinite(action.at)) {
