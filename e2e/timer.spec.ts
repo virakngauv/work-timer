@@ -33,7 +33,10 @@ async function readIndexedWorkday(page: Page): Promise<IndexedWorkday> {
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
           const database = open.result;
-          const transaction = database.transaction(["meta", "events"], "readonly");
+          const transaction = database.transaction(
+            ["meta", "events"],
+            "readonly",
+          );
           const meta = transaction.objectStore("meta").get("current");
           const events = transaction.objectStore("events").getAll();
           transaction.oncomplete = () => {
