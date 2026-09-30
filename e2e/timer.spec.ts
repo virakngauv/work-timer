@@ -184,7 +184,7 @@ test("preserves an edit racing a transition", async ({ context, page }) => {
   expect(stored.events[0].at).toBe(expectedAt);
 });
 
-test("validates a stale edit against a new boundary", async ({ context, page }) => {
+test("rejects a stale edit after a new boundary", async ({ context, page }) => {
   await suppressBroadcastNotifications(context);
   const startedAt = Date.now() - 10 * 60_000;
   const date = new Date(startedAt);
