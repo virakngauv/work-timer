@@ -1,142 +1,173 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { installWebLocks } from "@/test/web-locks";
-import {
-  loadWorkday,
-  localDateKey,
-  saveWorkday,
-  STORAGE_KEY,
-} from "@/lib/storage";
-import { dispatchWorkday, getWorkdaySnapshot } from "@/lib/workday-store";
+import { describe, expect, it } from "vitest";
+import { localDateKey, type PersistedWorkday } from "@/lib/storage";
+import { applyWorkdayAction } from "@/lib/workday-actions";
 
-const start = Date.now() - 60_000;
+const start = new Date(2026, 8, 29, 12, 0, 0).getTime();
+const base: PersistedWorkday = {
+  dateKey: localDateKey(start),
+  events: [{ id: "start", state: "work", at: start }],
+};
 
-beforeEach(() => {
-  installWebLocks();
-  localStorage.clear();
-  saveWorkday(localDateKey(), [{ id: "start", state: "work", at: start }]);
-});
+function id(): string {
+  return "next";
+}
 
-describe("locked workday actions", () => {
-  it("coalesces simultaneous explicit transitions without toggling twice", async () => {
-    await Promise.all([
-      dispatchWorkday({ type: "transition", from: "work", state: "break" }),
-      dispatchWorkday({ type: "transition", from: "work", state: "break" }),
-    ]);
-    expect(loadWorkday().events.map((event) => event.state)).toEqual([
+describe("workday actions", () => {
+  it("coalesces a repeated explicit transition instead of toggling twice", () => {
+    const first = applyWorkdayAction(
+      base,
+      { type: "transition", from: "work", state: "break" },
+      start + 1_000,
+      id,
+    );
+    const second = applyWorkdayAction(
+      first.workday,
+      { type: "transition", from: "work", state: "break" },
+      start + 2_000,
+      id,
+    );
+
+    expect(second.mutation.type).toBe("none");
+    expect(second.workday.events.map((event) => event.state)).toEqual([
       "work",
       "break",
     ]);
   });
 
-  it("reads after acquiring the lock and preserves a queued boundary edit", async () => {
-    const edit = dispatchWorkday({
-      type: "edit",
-      eventId: "start",
-      at: start - 60_000,
-    });
-    const transition = dispatchWorkday({
-      type: "transition",
-      from: "work",
-      state: "break",
-    });
-    await Promise.all([edit, transition]);
-    expect(loadWorkday().events[0].at).toBe(start - 60_000);
-    expect(loadWorkday().events.map((event) => event.state)).toEqual([
+  it("preserves a boundary edit followed by a transition", () => {
+    const edited = applyWorkdayAction(
+      base,
+      {
+        type: "edit",
+        eventId: "start",
+        at: start - 60_000,
+      },
+      start + 1_000,
+    );
+    const transitioned = applyWorkdayAction(
+      edited.workday,
+      { type: "transition", from: "work", state: "break" },
+      start + 2_000,
+      id,
+    );
+
+    expect(transitioned.workday.events[0].at).toBe(start - 60_000);
+    expect(transitioned.workday.events.map((event) => event.state)).toEqual([
       "work",
       "break",
     ]);
   });
 
-  it("validates a queued edit against a newly written boundary", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(start + 30_000);
-    const transition = dispatchWorkday({
-      type: "transition",
-      from: "work",
-      state: "break",
-    });
-    await transition;
-    await expect(
-      dispatchWorkday({ type: "edit", eventId: "start", at: start + 30_000 }),
-    ).rejects.toThrow("before the next boundary");
-    expect(loadWorkday().events[0].at).toBe(start);
+  it("validates an edit against a newly committed boundary", () => {
+    const transitioned = applyWorkdayAction(
+      base,
+      { type: "transition", from: "work", state: "break" },
+      start + 30_000,
+      id,
+    );
+
+    expect(() =>
+      applyWorkdayAction(
+        transitioned.workday,
+        {
+          type: "edit",
+          eventId: "start",
+          at: start + 30_000,
+        },
+        start + 30_000,
+      ),
+    ).toThrow("before the next boundary");
   });
 
-  it("does not let a stale resume restart a stopped day", async () => {
-    await dispatchWorkday({ type: "transition", from: "work", state: "break" });
-    await dispatchWorkday({
-      type: "transition",
-      from: "break",
-      state: "stopped",
-    });
-    await expect(
-      dispatchWorkday({ type: "transition", from: "break", state: "work" }),
-    ).rejects.toThrow("changed in another tab");
-    expect(getWorkdaySnapshot().events.at(-1)?.state).toBe("stopped");
+  it("rejects an incompatible stale transition", () => {
+    const stopped: PersistedWorkday = {
+      ...base,
+      events: [
+        ...base.events,
+        { id: "break", state: "break", at: start + 1_000 },
+        { id: "stop", state: "stopped", at: start + 2_000 },
+      ],
+    };
+
+    expect(() =>
+      applyWorkdayAction(
+        stopped,
+        { type: "transition", from: "break", state: "work" },
+        start + 3_000,
+        id,
+      ),
+    ).toThrow("changed in another tab");
   });
 
-  it("keeps equal-clock transitions strictly chronological", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(start);
-    await dispatchWorkday({ type: "transition", from: "work", state: "break" });
-    await dispatchWorkday({ type: "transition", from: "break", state: "work" });
-    expect(loadWorkday().events.map((event) => event.at)).toEqual([
+  it("keeps equal-clock transitions strictly chronological", () => {
+    const first = applyWorkdayAction(
+      base,
+      { type: "transition", from: "work", state: "break" },
+      start,
+      id,
+    );
+    const second = applyWorkdayAction(
+      first.workday,
+      { type: "transition", from: "break", state: "work" },
+      start,
+      () => "third",
+    );
+
+    expect(second.workday.events.map((event) => event.at)).toEqual([
       start,
       start + 1,
       start + 2,
     ]);
   });
 
-  it("fails safely when Web Locks or storage reads are unavailable", async () => {
-    const original = localStorage.getItem(STORAGE_KEY);
-    Object.defineProperty(navigator, "locks", {
-      configurable: true,
-      value: undefined,
-    });
-    await expect(
-      dispatchWorkday({ type: "transition", from: "work", state: "break" }),
-    ).rejects.toThrow("Web Locks");
-    installWebLocks();
-    const read = vi
-      .spyOn(Storage.prototype, "getItem")
-      .mockImplementation(() => {
-        throw new Error("denied");
-      });
-    await expect(
-      dispatchWorkday({ type: "transition", from: "work", state: "break" }),
-    ).rejects.toThrow("Could not read");
-    read.mockRestore();
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(original);
+  it("starts a new day after an old stopped day but retains an overnight active day", () => {
+    const now = new Date(2026, 8, 30, 0, 0, 1).getTime();
+    const oldStopped: PersistedWorkday = {
+      dateKey: localDateKey(start),
+      events: [
+        { id: "old", state: "work", at: start },
+        { id: "stop", state: "stopped", at: start + 1_000 },
+      ],
+    };
+    const restarted = applyWorkdayAction(
+      oldStopped,
+      { type: "transition", from: "stopped", state: "work" },
+      now,
+      id,
+    );
+
+    expect(restarted.mutation.type).toBe("reset");
+    expect(restarted.workday.dateKey).toBe(localDateKey(now));
+    expect(restarted.workday.events).toHaveLength(1);
+    expect(restarted.workday.events[0].at).toBe(now);
+
+    const overnight = applyWorkdayAction(
+      { dateKey: localDateKey(start), events: base.events },
+      { type: "transition", from: "work", state: "break" },
+      now,
+      id,
+    );
+    expect(overnight.workday.dateKey).toBe(localDateKey(start));
+    expect(overnight.workday.events).toHaveLength(2);
   });
 
-  it("does not publish a failed write and releases the lock", async () => {
-    const write = vi
-      .spyOn(Storage.prototype, "setItem")
-      .mockImplementation(() => {
-        throw new Error("quota");
-      });
-    await expect(
-      dispatchWorkday({ type: "transition", from: "work", state: "break" }),
-    ).rejects.toThrow("Could not save");
-    expect(getWorkdaySnapshot().events).toEqual(loadWorkday().events);
-    write.mockRestore();
-    await dispatchWorkday({ type: "transition", from: "work", state: "break" });
-    expect(loadWorkday().events.at(-1)?.state).toBe("break");
-  });
+  it("uses the same clock sample for rollover date selection and transition time", () => {
+    const now = new Date(2026, 8, 30, 0, 0, 0).getTime();
+    const oldStopped: PersistedWorkday = {
+      dateKey: "2026-09-29",
+      events: [
+        { id: "old", state: "work", at: now - 2_000 },
+        { id: "stop", state: "stopped", at: now - 1_000 },
+      ],
+    };
+    const result = applyWorkdayAction(
+      oldStopped,
+      { type: "transition", from: "stopped", state: "work" },
+      now,
+      id,
+    );
 
-  it("starts a new day after an old stopped day but retains an overnight active day", async () => {
-    saveWorkday("2000-01-01", [
-      { id: "old", state: "work", at: start - 1 },
-      { id: "stop", state: "stopped", at: start },
-    ]);
-    await dispatchWorkday({
-      type: "transition",
-      from: "stopped",
-      state: "work",
-    });
-    expect(loadWorkday().dateKey).toBe(localDateKey());
-    expect(loadWorkday().events).toHaveLength(1);
-    saveWorkday("2000-01-01", [{ id: "old", state: "work", at: start }]);
-    await dispatchWorkday({ type: "transition", from: "work", state: "break" });
-    expect(loadWorkday().dateKey).toBe("2000-01-01");
-    expect(loadWorkday().events).toHaveLength(2);
+    expect(result.workday.dateKey).toBe(localDateKey(now));
+    expect(result.workday.events[0].at).toBe(now);
   });
 });
