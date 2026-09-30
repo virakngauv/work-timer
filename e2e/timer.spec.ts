@@ -63,7 +63,7 @@ async function readIndexedWorkday(page: Page): Promise<IndexedWorkday> {
   );
 }
 
-test("work to break flow creates editable session history", async ({ page }) => {
+test("work to break flow creates editable history", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText("STOPPED")).toBeVisible();
