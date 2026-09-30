@@ -56,7 +56,7 @@ Transition events store that boundary once. Interval rows are still the right pr
       state: TimerState;
     }
 
-The local MVP stores one ordered event array plus a local-calendar `dateKey` identifying the workday.
+The local MVP exposes one ordered event stream plus a local-calendar `dateKey` identifying the workday. IndexedDB persists the transition events as individual records and keeps the current workday metadata separately.
 
 ## Workday rollover
 
@@ -108,20 +108,20 @@ The UI should offer common relative corrections (-5, -1, +1, +5 minutes) and an 
 
 ### MVP
 
-Browser localStorage:
+Browser IndexedDB:
 
-    {
-      "version": 1,
-      "dateKey": "YYYY-MM-DD",
-      "events": [...]
-    }
+- one `meta` record identifies the current workday with its local-calendar `dateKey`
+- one `events` object store persists each explicit transition event by ID
+- each timer action or boundary edit reads the latest metadata and events, validates the explicit action, and writes the resulting change in one `readwrite` transaction
+- BroadcastChannel notifications make other tabs reread IndexedDB; correctness does not depend on receiving a notification
+- valid legacy `work-timer:v1` localStorage data migrates once, while unreadable legacy data is preserved and reported
 
 Benefits:
 
 - no credentials
 - no backend
 - instant local startup
-- enough for a personal single-device tool
+- atomic cross-tab mutations for a personal single-device tool
 
 Tradeoff: clearing site data removes history and there is no device sync.
 
