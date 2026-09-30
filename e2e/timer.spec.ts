@@ -1,9 +1,4 @@
-import {
-  expect,
-  test,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 interface IndexedWorkday {
   dateKey: string;
@@ -106,9 +101,7 @@ test("migrates valid localStorage once and never lets legacy data replace Indexe
     { id: "legacy", state: "work", at: startedAt },
   ]);
 
-  await page.evaluate(() =>
-    localStorage.setItem("work-timer:v1", "{broken"),
-  );
+  await page.evaluate(() => localStorage.setItem("work-timer:v1", "{broken"));
   await page.reload();
   await expect(page.getByText("WORK MODE")).toBeVisible();
   expect((await readIndexedWorkday(page)).events).toEqual([
@@ -127,7 +120,9 @@ test("preserves malformed legacy data and reports the migration error", async ({
 
   await page.goto("/");
 
-  await expect(page.getByRole("alert")).toContainText("unreadable");
+  await expect(page.locator("main").getByRole("alert")).toContainText(
+    "unreadable",
+  );
   await expect(
     page.getByRole("button", { name: "Start Day" }),
   ).toBeDisabled();
@@ -240,7 +235,7 @@ test("a failed IndexedDB transaction leaves stored state unchanged", async ({
   });
 
   await start.click();
-  await expect(page.getByRole("alert")).toHaveText(
+  await expect(page.locator("main").getByRole("alert")).toHaveText(
     "Could not save timer data. The change was not applied.",
   );
   expect((await readIndexedWorkday(page)).events).toEqual([]);
