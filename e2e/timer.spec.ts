@@ -113,9 +113,9 @@ test("migrates legacy localStorage once", async ({ context, page }) => {
   expect((await readIndexedWorkday(page)).events).toEqual([
     { id: "legacy", state: "work", at: startedAt },
   ]);
-  expect(
-    await page.evaluate(() => localStorage.getItem("work-timer:v1")),
-  ).toBe("{broken");
+  expect(await page.evaluate(() => localStorage.getItem("work-timer:v1"))).toBe(
+    "{broken",
+  );
 });
 
 test("preserves malformed legacy data", async ({ context, page }) => {
@@ -127,9 +127,9 @@ test("preserves malformed legacy data", async ({ context, page }) => {
     "unreadable",
   );
   await expect(page.getByRole("button", { name: "Start Day" })).toBeDisabled();
-  expect(
-    await page.evaluate(() => localStorage.getItem("work-timer:v1")),
-  ).toBe("{broken");
+  expect(await page.evaluate(() => localStorage.getItem("work-timer:v1"))).toBe(
+    "{broken",
+  );
 });
 
 test("deduplicates stale transitions", async ({ context, page }) => {
