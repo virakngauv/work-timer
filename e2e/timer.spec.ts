@@ -150,6 +150,33 @@ test("work to break flow creates editable history", async ({ page }) => {
   await expect(page.getByRole("button", { name: "-5 min" })).toBeVisible();
 });
 
+test("balances session table columns at iPad width", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start Work", exact: true }).click();
+
+  const mode = await page
+    .getByRole("columnheader", { name: "Mode" })
+    .boundingBox();
+  const startEnd = await page
+    .getByRole("columnheader", { name: "Start / End" })
+    .boundingBox();
+  const duration = await page
+    .getByRole("columnheader", { name: "Duration" })
+    .boundingBox();
+
+  expect(mode).not.toBeNull();
+  expect(startEnd).not.toBeNull();
+  expect(duration).not.toBeNull();
+
+  const gapBefore = startEnd!.x - (mode!.x + mode!.width);
+  const gapAfter = duration!.x - (startEnd!.x + startEnd!.width);
+
+  expect(gapBefore).toBeGreaterThanOrEqual(12);
+  expect(gapAfter).toBeGreaterThanOrEqual(12);
+  expect(Math.abs(gapBefore - gapAfter)).toBeLessThanOrEqual(2);
+});
+
 test("retains stopped history across midnight and later starts", async ({
   page,
 }) => {
