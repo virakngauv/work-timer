@@ -563,3 +563,67 @@ test("closes an editor when its session is cleared in another tab", async ({
     page.getByRole("button", { name: "Start Work", exact: true }),
   ).toBeEnabled();
 });
+
+test("preserves the repeated DST hour and quick correction offsets", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    timezoneId: "America/Los_Angeles",
+  });
+  try {
+    const page = await context.newPage();
+    await page.clock.install({ time: new Date("2026-11-02T20:00:00Z") });
+    const original = Date.parse("2026-11-01T09:30:00Z");
+    await seedTimerEvents(page, [
+      { id: "work", state: "work", at: original },
+      { id: "stop", state: "stopped", at: Date.parse("2026-11-01T10:30:00Z") },
+    ]);
+    await page.getByRole("button", { name: /^Edit work session/ }).click();
+    await expect(page.getByLabel("Exact start time")).toHaveValue(
+      /^2026-11-01T01:30(?::00(?:\.0+)?)?$/,
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    expect((await readIndexedHistory(page)).events[0].at).toBe(original);
+
+    await page.getByRole("button", { name: /^Edit work session/ }).click();
+    await page.getByLabel("Exact start time").fill("2026-11-01T01:02");
+    await page.getByRole("button", { name: "-5 min", exact: true }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    expect((await readIndexedHistory(page)).events[0].at).toBe(
+      Date.parse("2026-11-01T08:57:00Z"),
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test("rejects nonexistent local times during the DST spring gap", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    timezoneId: "America/Los_Angeles",
+  });
+  try {
+    const page = await context.newPage();
+    const original = Date.parse("2026-03-08T09:30:00Z");
+    await seedTimerEvents(page, [
+      { id: "work", state: "work", at: original },
+      { id: "stop", state: "stopped", at: Date.parse("2026-03-08T10:30:00Z") },
+    ]);
+    await page.getByRole("button", { name: /^Edit work session/ }).click();
+    await page.getByLabel("Exact start time").fill("2026-03-08T02:30");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("dialog").getByRole("alert")).toHaveText(
+      "Enter a valid date and time.",
+    );
+    expect((await readIndexedHistory(page)).events[0].at).toBe(original);
+  } finally {
+    await context.close();
+  }
+});

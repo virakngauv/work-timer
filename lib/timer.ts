@@ -193,6 +193,27 @@ export function toLocalDateTimeInput(ms: number): string {
   return local.toISOString().slice(0, 19);
 }
 
-export function fromLocalDateTimeInput(value: string): number {
-  return new Date(value).getTime();
+export function fromLocalDateTimeInput(
+  value: string,
+  referenceAt?: number,
+): number {
+  const timestamp = new Date(value).getTime();
+  const secondsValue = value.replace(/\.0+$/, "");
+  const normalized =
+    secondsValue.length === 16 ? `${secondsValue}:00` : secondsValue;
+  // Date normalizes nonexistent local times; the editor must reject them.
+  if (
+    !Number.isFinite(timestamp) ||
+    toLocalDateTimeInput(timestamp) !== normalized
+  )
+    return NaN;
+  if (referenceAt !== undefined) {
+    const offsetDifference =
+      new Date(referenceAt).getTimezoneOffset() -
+      new Date(timestamp).getTimezoneOffset();
+    const alternate = timestamp + offsetDifference * 60_000;
+    // In a repeated hour, prefer the occurrence matching the draft's offset.
+    if (toLocalDateTimeInput(alternate) === normalized) return alternate;
+  }
+  return timestamp;
 }

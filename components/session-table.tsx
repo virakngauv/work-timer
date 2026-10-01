@@ -40,6 +40,9 @@ export function SessionTable({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [draftReferenceAt, setDraftReferenceAt] = useState<number | undefined>(
+    undefined,
+  );
   const segments = useMemo(
     () => deriveSegments(events, 0).toReversed(),
     [events],
@@ -75,6 +78,7 @@ export function SessionTable({
 
   // Follow boundary corrections from another tab without discarding local drafts on every tick.
   if (editingEvent && editingEvent.at !== syncedAt) {
+    setDraftReferenceAt(editingEvent.at);
     setSyncedAt(editingEvent.at);
     setDraft(toLocalDateTimeInput(editingEvent.at));
   }
@@ -103,6 +107,7 @@ export function SessionTable({
       const event = events[index + (field === "end" ? 1 : 0)];
       if (!event) return;
       setEditor({ sessionId, field });
+      setDraftReferenceAt(event.at);
       setSyncedAt(event.at);
       setDraft(toLocalDateTimeInput(event.at));
       setError(null);
@@ -111,12 +116,14 @@ export function SessionTable({
   );
 
   function adjust(minutes: number) {
-    const timestamp = fromLocalDateTimeInput(draft);
+    const timestamp = fromLocalDateTimeInput(draft, draftReferenceAt);
     if (!Number.isFinite(timestamp)) {
       setError("Enter a valid date and time.");
       return;
     }
-    setDraft(toLocalDateTimeInput(timestamp + minutes * 60_000));
+    const adjusted = timestamp + minutes * 60_000;
+    setDraftReferenceAt(adjusted);
+    setDraft(toLocalDateTimeInput(adjusted));
     setError(null);
   }
 
@@ -124,7 +131,7 @@ export function SessionTable({
     if (!editingEvent) return;
     // Display whole seconds while retaining the shared boundary's precision.
     const timestamp =
-      fromLocalDateTimeInput(draft) +
+      fromLocalDateTimeInput(draft, draftReferenceAt) +
       new Date(editingEvent.at).getMilliseconds();
     let result: string | null;
     try {
