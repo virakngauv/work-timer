@@ -41,7 +41,7 @@ describe("session time editing", () => {
       );
 
       await user.click(
-        screen.getByRole("button", { name: "Edit work session" }),
+        screen.getByRole("button", { name: /^Edit work session/ }),
       );
       await user.click(screen.getByRole("button", { name: "End" }));
       const input = screen.getByLabelText("Exact end time");
@@ -77,7 +77,9 @@ describe("session time editing", () => {
         pending={false}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Edit work session" }));
+    await user.click(
+      screen.getByRole("button", { name: /^Edit work session/ }),
+    );
     const input = screen.getByLabelText("Exact start time");
     // Native date/time controls do not support userEvent.type in jsdom.
     fireEvent.change(input, { target: { value } });
@@ -98,7 +100,7 @@ describe("session time editing", () => {
         pending={false}
       />,
     );
-    const trigger = screen.getByRole("button", { name: "Edit work session" });
+    const trigger = screen.getByRole("button", { name: /^Edit work session/ });
     await user.click(trigger);
     expect(screen.getByRole("button", { name: "End" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -141,5 +143,31 @@ describe("session time editing", () => {
     expect(
       within(screen.getByRole("table")).getAllByRole("row")[1],
     ).toHaveTextContent("Timer stopped");
+  });
+  it("gives same-mode edit buttons distinct session context even within one second", () => {
+    const start = new Date(2026, 0, 15, 12).getTime();
+    render(
+      <SessionTable
+        events={[
+          { id: "work1", state: "work", at: start },
+          { id: "break", state: "break", at: start + 100 },
+          { id: "work2", state: "work", at: start + 200 },
+        ]}
+        now={start + 60_000}
+        onChangeTimestamp={vi.fn()}
+        pending={false}
+      />,
+    );
+    const buttons = screen.getAllByRole("button", {
+      name: /^Edit work session/,
+    });
+    const names = buttons.map((button) => button.getAttribute("aria-label"));
+    expect(new Set(names).size).toBe(2);
+    expect(buttons[0]).toHaveAccessibleName(
+      `Edit work session 3, started ${new Date(start + 200).toLocaleString()}`,
+    );
+    expect(buttons[1]).toHaveAccessibleName(
+      `Edit work session 1, started ${new Date(start).toLocaleString()}`,
+    );
   });
 });

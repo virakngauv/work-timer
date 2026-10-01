@@ -140,7 +140,7 @@ test("work to break flow creates editable history", async ({ page }) => {
   await expect(rows.nth(0)).toContainText("Break");
   await expect(rows.nth(1)).toContainText("Work");
   await table
-    .getByRole("button", { name: /^Edit .* session$/ })
+    .getByRole("button", { name: /^Edit .* session / })
     .first()
     .click();
   await expect(
@@ -273,7 +273,7 @@ test("preserves an edit racing a transition", async ({ context, page }) => {
   await other.goto("/");
   await expect(other.getByText("Work Session")).toBeVisible();
 
-  await page.getByRole("button", { name: /^Edit .* session$/ }).click();
+  await page.getByRole("button", { name: /^Edit .* session / }).click();
   await page.getByRole("button", { name: "-1 min", exact: true }).click();
   const editedAt = await page.getByLabel("Exact start time").inputValue();
   const expectedAt = await page.evaluate(
@@ -302,7 +302,7 @@ test("rejects stale edit after new boundary", async ({ context, page }) => {
   await other.goto("/");
   await expect(other.getByText("Work Session")).toBeVisible();
 
-  await page.getByRole("button", { name: /^Edit .* session$/ }).click();
+  await page.getByRole("button", { name: /^Edit .* session / }).click();
   await page.getByRole("button", { name: "+5 min", exact: true }).click();
   await other.evaluate(
     (now) => {
@@ -327,7 +327,7 @@ test("preserves editor focus across tabs", async ({ context, page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Start Work", exact: true }).click();
   await expect(page.getByText("Work Session")).toBeVisible();
-  await page.getByRole("button", { name: /^Edit .* session$/ }).click();
+  await page.getByRole("button", { name: /^Edit .* session / }).click();
   const input = page.getByLabel("Exact start time");
   await input.focus();
   const draft = await input.inputValue();
@@ -535,7 +535,7 @@ test("closes an editor when its session is cleared in another tab", async ({
     { id: "work", state: "work", at: now - 60_000 },
     { id: "stop", state: "stopped", at: now - 30_000 },
   ]);
-  await page.getByRole("button", { name: "Edit work session" }).click();
+  await page.getByRole("button", { name: /^Edit work session/ }).click();
   await page.getByRole("button", { name: "End", exact: true }).click();
   const other = await context.newPage();
   await other.goto("/");

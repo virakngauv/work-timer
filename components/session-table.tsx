@@ -44,6 +44,12 @@ export function SessionTable({
   const segmentsById = new Map(
     segments.map((segment) => [segment.eventId, segment]),
   );
+  const sessionNumbers = new Map(
+    segments.map((segment, index) => [
+      segment.eventId,
+      segments.length - index,
+    ]),
+  );
   const session = segments.find(
     (segment) => segment.eventId === editor?.sessionId,
   );
@@ -201,7 +207,7 @@ export function SessionTable({
                       <button
                         type="button"
                         className="duration-edit-button"
-                        aria-label={`Edit ${segment.state} session`}
+                        aria-label={`Edit ${segment.state} session ${sessionNumbers.get(segment.eventId)}, started ${new Date(segment.startedAt).toLocaleString()}`}
                         aria-haspopup="dialog"
                         disabled={pending}
                         onClick={(event) => {

@@ -80,12 +80,12 @@ for (const scenario of [
       expect(target.width).toBeGreaterThanOrEqual(44);
       expect(target.height).toBeGreaterThanOrEqual(44);
     }
-    await page.getByRole("button", { name: "Edit work session" }).click();
+    await page.getByRole("button", { name: /^Edit work session/ }).click();
     await page.getByRole("button", { name: "End", exact: true }).click();
     await expect(page.getByLabel("Exact end time")).toBeFocused();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "Edit work session" }),
+      page.getByRole("button", { name: /^Edit work session/ }),
     ).toBeFocused();
   });
 }
