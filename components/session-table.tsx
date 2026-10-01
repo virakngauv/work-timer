@@ -130,7 +130,7 @@ export function SessionTable({
     try {
       if (!Number.isFinite(timestamp))
         throw new Error("Enter a valid date and time.");
-      if (timestamp > now)
+      if (timestamp > Date.now())
         throw new Error("Session times cannot be in the future.");
       editEventTimestamp(events, editingEvent.id, timestamp);
       // The store validates again against the latest persisted events, including other tabs.

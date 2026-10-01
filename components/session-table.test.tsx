@@ -18,7 +18,10 @@ beforeAll(() => {
     this.open = false;
   };
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("session time editing", () => {
   it("saves an unchanged boundary between same-second events without losing precision", async () => {
@@ -42,6 +45,33 @@ describe("session time editing", () => {
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onChangeTimestamp).toHaveBeenCalledWith("break", start + 200);
+  });
+
+  it("allows a stopped end correction after the display clock has frozen", async () => {
+    const user = userEvent.setup();
+    const start = new Date(2026, 0, 15, 12).getTime();
+    vi.spyOn(Date, "now").mockReturnValue(start + 60 * 60_000);
+    const onChangeTimestamp = vi.fn().mockResolvedValue(null);
+    render(
+      <SessionTable
+        events={[
+          { id: "work", state: "work", at: start },
+          { id: "stop", state: "stopped", at: start + 20 * 60_000 },
+        ]}
+        now={start + 20 * 60_000}
+        onChangeTimestamp={onChangeTimestamp}
+        pending={false}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /^Edit work session/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "End" }));
+    fireEvent.change(screen.getByLabelText("Exact end time"), {
+      target: { value: "2026-01-15T12:30" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onChangeTimestamp).toHaveBeenCalledWith("stop", start + 30 * 60_000);
   });
 
   it.each(["break", "stopped"] as TimerState[])(
@@ -88,6 +118,7 @@ describe("session time editing", () => {
   ])("rejects invalid start %s before saving", async (value, message) => {
     const user = userEvent.setup();
     const start = new Date(2026, 0, 15, 12).getTime();
+    vi.spyOn(Date, "now").mockReturnValue(start + 25 * 60_000);
     const onChangeTimestamp = vi.fn();
     render(
       <SessionTable
