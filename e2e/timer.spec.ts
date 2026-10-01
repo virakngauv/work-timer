@@ -125,7 +125,7 @@ for (const control of ["Start Break", /^Break Total/]) {
 test("work to break flow creates editable history", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
+  await expect(page.getByText("Total time", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Start Work", exact: true }).click();
   await expect(page.getByText("Work Session")).toBeVisible();
 
@@ -257,7 +257,7 @@ test("stops the latest mode when another tab has switched", async ({
   await expect(other.getByText("Break Session")).toBeVisible();
   await expect(page.getByText("Work Session")).toBeVisible();
   await page.getByRole("button", { name: "Stop" }).click();
-  await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
+  await expect(page.getByText("Total time", { exact: true })).toBeVisible();
   expect(
     (await readIndexedHistory(page)).events.map((event) => event.state),
   ).toEqual(["work", "break", "stopped"]);
@@ -275,6 +275,7 @@ test("preserves an edit racing a transition", async ({ context, page }) => {
 
   await page.getByRole("button", { name: /^Edit .* session / }).click();
   await page.getByRole("button", { name: "-1 min", exact: true }).click();
+  const originalAt = (await readIndexedHistory(page)).events[0].at;
   const editedAt = await page.getByLabel("Exact start time").inputValue();
   const expectedAt = await page.evaluate(
     (value) => new Date(value).getTime(),
@@ -290,7 +291,7 @@ test("preserves an edit racing a transition", async ({ context, page }) => {
   await expect(page.getByLabel("Exact start time")).not.toBeVisible();
   const stored = await readIndexedHistory(page);
   expect(stored.events.map((event) => event.state)).toEqual(["work", "break"]);
-  expect(stored.events[0].at).toBe(expectedAt);
+  expect(stored.events[0].at).toBe(expectedAt + (originalAt % 1000));
 });
 
 test("rejects stale edit after new boundary", async ({ context, page }) => {
@@ -437,7 +438,7 @@ test("clearing timers requires confirmation and can be dismissed safely", async 
   const original = await readIndexedHistory(page);
   const other = await context.newPage();
   await other.goto("/");
-  await expect(other.getByText("Stopped", { exact: true })).toBeVisible();
+  await expect(other.getByText("Total time", { exact: true })).toBeVisible();
   const trigger = page.getByRole("button", {
     name: "Clear timers",
     exact: true,
@@ -501,6 +502,10 @@ test("a stale clear confirmation cannot erase a newly running timer", async ({
     "Stop the timer before clearing it.",
   );
   expect((await readIndexedHistory(page)).events).toHaveLength(3);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    page.getByRole("region", { name: "Timer", exact: true }),
+  ).toBeFocused();
 });
 
 test("a failed clear preserves history and keeps the warning open", async ({

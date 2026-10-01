@@ -112,7 +112,10 @@ export function SessionTable({
 
   async function save() {
     if (!editingEvent) return;
-    const timestamp = fromLocalDateTimeInput(draft);
+    // Display whole seconds while retaining the shared boundary's precision.
+    const timestamp =
+      fromLocalDateTimeInput(draft) +
+      new Date(editingEvent.at).getMilliseconds();
     let result: string | null;
     try {
       if (!Number.isFinite(timestamp))

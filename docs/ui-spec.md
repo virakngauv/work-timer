@@ -18,6 +18,8 @@ Keep the current timer large at the top, Work Total and Break Total side by side
 
 ### Stopped
 
+- The prominent timer shows combined accumulated Work and Break time, labeled **Total time**.
+
 - Totals and history remain visible across calendar dates.
 - No time accumulates.
 - Both total cards can start their corresponding mode.

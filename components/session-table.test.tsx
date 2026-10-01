@@ -21,6 +21,29 @@ beforeAll(() => {
 afterEach(cleanup);
 
 describe("session time editing", () => {
+  it("saves an unchanged boundary between same-second events without losing precision", async () => {
+    const user = userEvent.setup();
+    const start = new Date(2026, 0, 15, 12).getTime();
+    const onChangeTimestamp = vi.fn().mockResolvedValue(null);
+    render(
+      <SessionTable
+        events={[
+          { id: "work", state: "work", at: start + 100 },
+          { id: "break", state: "break", at: start + 200 },
+          { id: "stop", state: "stopped", at: start + 300 },
+        ]}
+        now={start + 1000}
+        onChangeTimestamp={onChangeTimestamp}
+        pending={false}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /^Edit break session/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onChangeTimestamp).toHaveBeenCalledWith("break", start + 200);
+  });
+
   it.each(["break", "stopped"] as TimerState[])(
     "edits the work end by updating its following %s transition",
     async (nextState) => {

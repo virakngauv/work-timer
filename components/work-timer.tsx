@@ -69,13 +69,16 @@ export function WorkTimer() {
   const [clearEvents, setClearEvents] = useState<TimerEvent[] | null>(null);
   const [clearError, setClearError] = useState<string | null>(null);
   const clearDialogRef = useRef<HTMLDialogElement>(null);
+  const clearDialogOpenRef = useRef(false);
   const cancelClearRef = useRef<HTMLButtonElement>(null);
   const clearTriggerRef = useRef<HTMLButtonElement>(null);
   const restoreClearFocusRef = useRef(false);
   const clearedRef = useRef(false);
   const startWorkRef = useRef<HTMLButtonElement>(null);
+  const timerSurfaceRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (clearEvents && !clearDialogRef.current?.open) {
+      clearDialogOpenRef.current = true;
       clearDialogRef.current?.showModal();
       cancelClearRef.current?.focus();
     }
@@ -83,7 +86,9 @@ export function WorkTimer() {
 
   useEffect(() => {
     if (!clearEvents && !pending && restoreClearFocusRef.current) {
-      (clearedRef.current ? startWorkRef : clearTriggerRef).current?.focus();
+      const target = (clearedRef.current ? startWorkRef : clearTriggerRef)
+        .current;
+      (target ?? timerSurfaceRef.current)?.focus();
       restoreClearFocusRef.current = false;
     }
   }, [clearEvents, pending]);
@@ -91,6 +96,7 @@ export function WorkTimer() {
   function closeClearDialog(cleared = false) {
     restoreClearFocusRef.current = true;
     clearedRef.current = cleared;
+    clearDialogOpenRef.current = false;
     clearDialogRef.current?.close();
     setClearEvents(null);
     setClearError(null);
@@ -167,7 +173,9 @@ export function WorkTimer() {
       ? "Break Session"
       : state === "work"
         ? "Work Session"
-        : "Stopped";
+        : "Total time";
+  const prominentMs =
+    state === "stopped" ? totals.workMs + totals.breakMs : totals.currentMs;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl p-[clamp(12px,3vw,24px)]">
@@ -175,11 +183,16 @@ export function WorkTimer() {
         <h1 className="text-xs font-semibold text-slate-500">Work Timer</h1>
       </header>
 
-      <section className="rounded-3xl border border-slate-200 bg-white/85 p-[clamp(12px,3vw,24px)] shadow-xl shadow-slate-200/50 backdrop-blur">
+      <section
+        ref={timerSurfaceRef}
+        tabIndex={-1}
+        aria-label="Timer"
+        className="rounded-3xl border border-slate-200 bg-white/85 p-[clamp(12px,3vw,24px)] shadow-xl shadow-slate-200/50 backdrop-blur"
+      >
         <MetricCard
           label={currentLabel}
           prominent
-          value={formatDuration(totals.currentMs)}
+          value={formatDuration(prominentMs)}
           active={state !== "stopped"}
           tone={state === "break" ? "break" : "work"}
         />
@@ -289,6 +302,9 @@ export function WorkTimer() {
         className="session-dialog"
         aria-labelledby="clear-dialog-title"
         aria-describedby="clear-dialog-description"
+        onClose={() => {
+          if (clearDialogOpenRef.current) closeClearDialog();
+        }}
         onCancel={(event) => {
           event.preventDefault();
           if (!pending) closeClearDialog();

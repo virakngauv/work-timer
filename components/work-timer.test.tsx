@@ -75,7 +75,7 @@ describe("WorkTimer", () => {
     const user = userEvent.setup();
     render(<WorkTimer />);
 
-    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.getByText("Total time")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Start Work" }));
     expect(screen.getByText("Work Session")).toBeInTheDocument();
@@ -88,6 +88,27 @@ describe("WorkTimer", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText(/Work/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Break/).length).toBeGreaterThan(0);
+  });
+
+  it("shows combined accumulated time when stopped and the current session when running", () => {
+    mockedStore.snapshot.events = [
+      { id: "work", at: 0, state: "work" },
+      { id: "break", at: 60_000, state: "break" },
+      { id: "stop", at: 90_000, state: "stopped" },
+    ];
+    const { rerender } = render(<WorkTimer />);
+    expect(screen.getByRole("timer")).toHaveAccessibleName(
+      "Total time: 0 hours, 1 minutes, 30 seconds",
+    );
+    mockedStore.snapshot.events.push({
+      id: "resume",
+      at: Date.now(),
+      state: "work",
+    });
+    rerender(<WorkTimer />);
+    expect(screen.getByRole("timer")).toHaveAccessibleName(
+      "Work Session: 0 hours, 0 minutes, 0 seconds",
+    );
   });
 
   it("switches modes through the totals without restarting the active mode", async () => {
@@ -146,6 +167,6 @@ describe("WorkTimer", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not save timer data. The change was not applied.",
     );
-    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.getByText("Total time")).toBeInTheDocument();
   });
 });
