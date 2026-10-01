@@ -503,9 +503,13 @@ test("a stale clear confirmation cannot erase a newly running timer", async ({
   );
   expect((await readIndexedHistory(page)).events).toHaveLength(3);
   await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(
-    page.getByRole("region", { name: "Timer", exact: true }),
-  ).toBeFocused();
+  const timerRegion = page.getByRole("region", { name: "Timer", exact: true });
+  await expect(timerRegion).toBeFocused();
+  expect(
+    await timerRegion.evaluate(
+      (element) => getComputedStyle(element).outlineStyle,
+    ),
+  ).toBe("solid");
 });
 
 test("a failed clear preserves history and keeps the warning open", async ({

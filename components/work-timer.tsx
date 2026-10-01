@@ -63,6 +63,7 @@ function MetricCard({
 export function WorkTimer() {
   const history = useTimer();
   const events = history.events;
+  const state = currentState(events);
   const [now, setNow] = useState(() => Date.now());
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -116,12 +117,33 @@ export function WorkTimer() {
   const hydrated = history.initialized;
 
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(interval);
-  }, []);
+    if (state === "stopped") return;
+    let timeout: number;
+    function tick() {
+      setNow(Date.now());
+      timeout = window.setTimeout(tick, 1001 - (Date.now() % 1000));
+    }
+    timeout = window.setTimeout(tick, 1001 - (Date.now() % 1000));
+    return () => window.clearTimeout(timeout);
+  }, [state]);
 
-  const totals = useMemo(() => calculateTotals(events, now), [events, now]);
-  const state = currentState(events);
+  const completedTotals = useMemo(
+    () => calculateTotals(events, events.at(-1)?.at ?? 0),
+    [events],
+  );
+  const currentMs =
+    state === "stopped"
+      ? 0
+      : Math.max(
+          0,
+          Math.floor(now / 1000) -
+            Math.floor((events.at(-1)?.at ?? now) / 1000),
+        ) * 1000;
+  const totals = {
+    workMs: completedTotals.workMs + (state === "work" ? currentMs : 0),
+    breakMs: completedTotals.breakMs + (state === "break" ? currentMs : 0),
+    currentMs,
+  };
 
   async function performAction(action: TimerAction): Promise<string | null> {
     setPending(true);

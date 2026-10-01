@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deriveSegments,
   editEventTimestamp,
@@ -40,21 +40,28 @@ export function SessionTable({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const segments = deriveSegments(events, now).toReversed();
-  const segmentsById = new Map(
-    segments.map((segment) => [segment.eventId, segment]),
+  const segments = useMemo(
+    () => deriveSegments(events, 0).toReversed(),
+    [events],
   );
-  const sessionNumbers = new Map(
-    segments.map((segment, index) => [
-      segment.eventId,
-      segments.length - index,
-    ]),
+  const segmentsById = useMemo(
+    () => new Map(segments.map((segment) => [segment.eventId, segment])),
+    [segments],
   );
-  const session = segments.find(
-    (segment) => segment.eventId === editor?.sessionId,
+  const sessionNumbers = useMemo(
+    () =>
+      new Map(
+        segments.map((segment, index) => [
+          segment.eventId,
+          segments.length - index,
+        ]),
+      ),
+    [segments],
   );
-  const sessionIndex = events.findIndex(
-    (event) => event.id === editor?.sessionId,
+  const session = editor ? segmentsById.get(editor.sessionId) : undefined;
+  const sessionIndex = useMemo(
+    () => events.findIndex((event) => event.id === editor?.sessionId),
+    [events, editor?.sessionId],
   );
   const editingEvent =
     editor && sessionIndex >= 0
@@ -89,16 +96,19 @@ export function SessionTable({
     triggerRef.current?.focus();
   }
 
-  function selectField(field: "start" | "end", sessionId = editor?.sessionId) {
-    if (!sessionId) return;
-    const index = events.findIndex((event) => event.id === sessionId);
-    const event = events[index + (field === "end" ? 1 : 0)];
-    if (!event) return;
-    setEditor({ sessionId, field });
-    setSyncedAt(event.at);
-    setDraft(toLocalDateTimeInput(event.at));
-    setError(null);
-  }
+  const selectField = useCallback(
+    (field: "start" | "end", sessionId: string | undefined) => {
+      if (!sessionId) return;
+      const index = events.findIndex((event) => event.id === sessionId);
+      const event = events[index + (field === "end" ? 1 : 0)];
+      if (!event) return;
+      setEditor({ sessionId, field });
+      setSyncedAt(event.at);
+      setDraft(toLocalDateTimeInput(event.at));
+      setError(null);
+    },
+    [events],
+  );
 
   function adjust(minutes: number) {
     const timestamp = fromLocalDateTimeInput(draft);
@@ -140,6 +150,93 @@ export function SessionTable({
     closeEditor();
   }
 
+  const renderRow = useCallback(
+    (event: TimerEvent, overrideSegment?: (typeof segments)[number]) => {
+      if (event.state === "stopped") {
+        return (
+          <tr role="row" key={event.id} className="session-stop-row">
+            <td role="cell" colSpan={3} className="session-stop-cell">
+              Timer stopped ·{" "}
+              <time
+                dateTime={new Date(event.at).toISOString()}
+                title={new Date(event.at).toLocaleString()}
+              >
+                {formatClockTime(event.at)}
+              </time>
+            </td>
+          </tr>
+        );
+      }
+      const segment = overrideSegment ?? segmentsById.get(event.id)!;
+      return (
+        <tr role="row" key={segment.eventId} className="session-row">
+          <td role="cell" className="session-mode">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-1 font-semibold ${segment.state === "work" ? "bg-emerald-50 text-emerald-800" : "bg-sky-50 text-sky-800"}`}
+            >
+              {segment.state === "work" ? "Work" : "Break"}
+            </span>
+          </td>
+          <td
+            role="cell"
+            className="time-cell"
+            title={`${new Date(segment.startedAt).toLocaleString()} – ${segment.endedAt !== null ? new Date(segment.endedAt).toLocaleString() : "Not ended"}`}
+          >
+            {formatTimeRange(segment.startedAt, segment.endedAt)}
+          </td>
+          <td role="cell" className="session-duration tabular">
+            <button
+              type="button"
+              className="duration-edit-button"
+              aria-label={`Edit ${segment.state} session ${sessionNumbers.get(segment.eventId)}, started ${new Date(segment.startedAt).toLocaleString()}`}
+              aria-haspopup="dialog"
+              disabled={pending}
+              onClick={(event) => {
+                triggerRef.current = event.currentTarget;
+                selectField("start", segment.eventId);
+              }}
+            >
+              <span>{formatSessionDuration(segment.durationMs)}</span>
+              <svg
+                className="time-edit-icon"
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m16 3 5 5L8 21H3v-5L16 3Z" />
+                <path d="m14 5 5 5" />
+              </svg>
+            </button>
+          </td>
+        </tr>
+      );
+    },
+    [pending, segmentsById, sessionNumbers, selectField],
+  );
+  const historyRows = useMemo(
+    () =>
+      events
+        .toReversed()
+        .filter((event) => !segmentsById.get(event.id)?.active)
+        .map((event) => renderRow(event)),
+    [events, segmentsById, renderRow],
+  );
+  const active = segments[0]?.active ? segments[0] : undefined;
+  const activeRow = active
+    ? renderRow(events.at(-1)!, {
+        ...active,
+        durationMs:
+          Math.max(
+            0,
+            Math.floor(now / 1000) - Math.floor(active.startedAt / 1000),
+          ) * 1000,
+      })
+    : null;
+
   return (
     <section
       ref={sectionRef}
@@ -173,70 +270,8 @@ export function SessionTable({
               </tr>
             </thead>
             <tbody role="rowgroup">
-              {events.toReversed().map((event) => {
-                if (event.state === "stopped") {
-                  return (
-                    <tr role="row" key={event.id} className="session-stop-row">
-                      <td role="cell" colSpan={3} className="session-stop-cell">
-                        Timer stopped ·{" "}
-                        <time
-                          dateTime={new Date(event.at).toISOString()}
-                          title={new Date(event.at).toLocaleString()}
-                        >
-                          {formatClockTime(event.at)}
-                        </time>
-                      </td>
-                    </tr>
-                  );
-                }
-                const segment = segmentsById.get(event.id)!;
-                return (
-                  <tr role="row" key={segment.eventId} className="session-row">
-                    <td role="cell" className="session-mode">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-1 font-semibold ${segment.state === "work" ? "bg-emerald-50 text-emerald-800" : "bg-sky-50 text-sky-800"}`}
-                      >
-                        {segment.state === "work" ? "Work" : "Break"}
-                      </span>
-                    </td>
-                    <td
-                      role="cell"
-                      className="time-cell"
-                      title={`${new Date(segment.startedAt).toLocaleString()} – ${segment.endedAt !== null ? new Date(segment.endedAt).toLocaleString() : "Not ended"}`}
-                    >
-                      {formatTimeRange(segment.startedAt, segment.endedAt)}
-                    </td>
-                    <td role="cell" className="session-duration tabular">
-                      <button
-                        type="button"
-                        className="duration-edit-button"
-                        aria-label={`Edit ${segment.state} session ${sessionNumbers.get(segment.eventId)}, started ${new Date(segment.startedAt).toLocaleString()}`}
-                        aria-haspopup="dialog"
-                        disabled={pending}
-                        onClick={(event) => {
-                          triggerRef.current = event.currentTarget;
-                          selectField("start", segment.eventId);
-                        }}
-                      >
-                        <span>{formatSessionDuration(segment.durationMs)}</span>
-                        <svg
-                          className="time-edit-icon"
-                          aria-hidden="true"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="m16 3 5 5L8 21H3v-5L16 3Z" />
-                          <path d="m14 5 5 5" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {activeRow}
+              {historyRows}
             </tbody>
           </table>
         </div>
@@ -270,7 +305,7 @@ export function SessionTable({
               <Button
                 aria-pressed={editor.field === "start"}
                 disabled={pending}
-                onClick={() => selectField("start")}
+                onClick={() => selectField("start", editor?.sessionId)}
                 variant={editor.field === "start" ? "primary" : "secondary"}
               >
                 Start
@@ -278,7 +313,7 @@ export function SessionTable({
               <Button
                 aria-pressed={editor.field === "end"}
                 disabled={pending || session.endedAt === null}
-                onClick={() => selectField("end")}
+                onClick={() => selectField("end", editor?.sessionId)}
                 variant={editor.field === "end" ? "primary" : "secondary"}
               >
                 End

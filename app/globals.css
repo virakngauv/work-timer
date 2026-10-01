@@ -46,7 +46,8 @@ input {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+section[tabindex="-1"]:focus {
   outline: 3px solid #047857;
   outline-offset: 2px;
 }
