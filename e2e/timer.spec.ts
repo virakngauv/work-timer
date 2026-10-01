@@ -155,7 +155,9 @@ test("balances session table columns at iPad width", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Start Work", exact: true }).click();
 
-  const mode = await page.getByRole("columnheader", { name: "Mode" }).boundingBox();
+  const mode = await page
+    .getByRole("columnheader", { name: "Mode" })
+    .boundingBox();
   const startEnd = await page
     .getByRole("columnheader", { name: "Start / End" })
     .boundingBox();
