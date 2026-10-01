@@ -1,22 +1,23 @@
 import { useSyncExternalStore } from "react";
-import { readWorkday, transactWorkday } from "@/lib/workday-db";
-import type { PersistedWorkday } from "@/lib/storage";
-import type { WorkdayAction } from "@/lib/workday-actions";
+import { readTimerHistory, transactTimer } from "@/lib/timer-db";
+import type { TimerHistory } from "@/lib/timer";
+import type { TimerAction } from "@/lib/timer-actions";
 
-export type { WorkdayAction } from "@/lib/workday-actions";
+export type { TimerAction } from "@/lib/timer-actions";
 
-interface WorkdaySnapshot extends PersistedWorkday {
+interface TimerSnapshot extends TimerHistory {
+  initialized: boolean;
   error: string | null;
 }
 
 const CHANGE_CHANNEL = "work-timer:changes:v1";
 const listeners = new Set<() => void>();
-const SERVER_SNAPSHOT: WorkdaySnapshot = {
-  dateKey: "",
+const SERVER_SNAPSHOT: TimerSnapshot = {
+  initialized: false,
   events: [],
   error: null,
 };
-let snapshot: WorkdaySnapshot = SERVER_SNAPSHOT;
+let snapshot: TimerSnapshot = SERVER_SNAPSHOT;
 let channel: BroadcastChannel | null = null;
 
 function errorMessage(error: unknown): string {
@@ -27,10 +28,10 @@ function emitChange(): void {
   for (const listener of listeners) listener();
 }
 
-async function refreshWorkday(): Promise<void> {
+async function refreshTimer(): Promise<void> {
   try {
-    const workday = await readWorkday();
-    snapshot = { ...workday, error: null };
+    const history = await readTimerHistory();
+    snapshot = { ...history, initialized: true, error: null };
   } catch (error) {
     snapshot = { ...snapshot, error: errorMessage(error) };
   }
@@ -38,11 +39,11 @@ async function refreshWorkday(): Promise<void> {
 }
 
 function handleVisibilityChange(): void {
-  if (!document.hidden) void refreshWorkday();
+  if (!document.hidden) void refreshTimer();
 }
 
 function handleReturnToPage(): void {
-  void refreshWorkday();
+  void refreshTimer();
 }
 
 function openChangeChannel(): BroadcastChannel | null {
@@ -58,13 +59,13 @@ function closeChangeChannel(): void {
   channel = null;
 }
 
-export function subscribeToWorkday(listener: () => void): () => void {
+export function subscribeToTimer(listener: () => void): () => void {
   if (listeners.size === 0) {
     openChangeChannel();
     window.addEventListener("focus", handleReturnToPage);
     window.addEventListener("pageshow", handleReturnToPage);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    void refreshWorkday();
+    void refreshTimer();
   }
   listeners.add(listener);
 
@@ -79,26 +80,26 @@ export function subscribeToWorkday(listener: () => void): () => void {
   };
 }
 
-export function getWorkdaySnapshot(): WorkdaySnapshot {
+export function getTimerSnapshot(): TimerSnapshot {
   return snapshot;
 }
 
-export function getServerWorkdaySnapshot(): WorkdaySnapshot {
+export function getServerTimerSnapshot(): TimerSnapshot {
   return SERVER_SNAPSHOT;
 }
 
-export function useWorkday(): WorkdaySnapshot {
+export function useTimer(): TimerSnapshot {
   return useSyncExternalStore(
-    subscribeToWorkday,
-    getWorkdaySnapshot,
-    getServerWorkdaySnapshot,
+    subscribeToTimer,
+    getTimerSnapshot,
+    getServerTimerSnapshot,
   );
 }
 
-export async function dispatchWorkday(action: WorkdayAction): Promise<void> {
+export async function dispatchTimer(action: TimerAction): Promise<void> {
   const now = Date.now();
-  const result = await transactWorkday(action, now);
-  snapshot = { ...result.workday, error: null };
+  const result = await transactTimer(action, now);
+  snapshot = { ...result.history, initialized: true, error: null };
   emitChange();
 
   if (result.changed) {

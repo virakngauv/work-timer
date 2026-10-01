@@ -46,11 +46,233 @@ input {
 }
 
 button:focus-visible,
-input:focus-visible {
-  outline: 3px solid rgba(23, 148, 71, 0.3);
+input:focus-visible,
+section[tabindex="-1"]:focus {
+  outline: 3px solid #047857;
   outline-offset: 2px;
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .time-edit-icon {
+    opacity: 0;
+    transition: opacity 150ms;
+  }
+
+  .duration-edit-button:hover .time-edit-icon,
+  .duration-edit-button:focus-visible .time-edit-icon {
+    opacity: 1;
+  }
+}
+
+.current-metric {
+  padding: clamp(14px, 3vw, 24px);
+}
+
+.total-metric {
+  padding: 12px clamp(12px, 2vw, 18px);
+}
+
+.timer-value {
+  display: flex;
+  flex-wrap: wrap;
+  color: #020617;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.timer-value > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.current-value {
+  margin-top: 0.75rem;
+  font-size: clamp(2rem, 13cqi, 3rem);
+}
+
+.total-value {
+  margin-top: 0.375rem;
+  font-size: clamp(1.25rem, 10cqi, 2rem);
+}
+
+.totals-grid,
+.timer-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.totals-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.75rem;
+}
+
+.timer-actions {
+  margin-top: 1rem;
+}
+
+.start-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.running-actions {
+  grid-template-columns: minmax(0, 1fr) minmax(min-content, 0.25fr);
+}
+
+.session-history {
+  overflow: hidden;
+}
+
+.session-table-scroll {
+  overflow-x: auto;
+}
+
+.session-table-scroll:focus-visible {
+  outline: 3px solid #047857;
+  outline-offset: -3px;
+}
+
+.session-table {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  justify-content: space-between;
+  column-gap: clamp(12px, 3vw, 24px);
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.session-table thead,
+.session-table tbody {
+  display: contents;
+}
+
+.session-table tr {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  padding-inline: clamp(6px, 2vw, 12px);
+}
+
+.session-head {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+.session-head th {
+  padding: 0.625rem 0;
+  overflow-wrap: anywhere;
+}
+
+.session-row {
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+  color: #1e293b;
+}
+
+.session-row > td {
+  padding: 0.125rem 0;
+  vertical-align: middle;
+}
+
+.session-row:hover {
+  background: #f8fafc;
+}
+
+.session-stop-row {
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.session-stop-cell {
+  grid-column: 1 / -1;
+  padding-block: 0.5rem;
+}
+
+.time-cell {
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.session-duration {
+  text-align: left;
+}
+
+.duration-edit-button {
+  display: inline-flex;
+  min-height: 44px;
+  min-width: 44px;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  border-radius: 0.375rem;
+  padding: 0 4px;
+  margin-left: -4px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.duration-edit-button > span {
+  white-space: nowrap;
+}
+
+.duration-edit-button .time-edit-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}
+
+.duration-edit-button:disabled {
+  cursor: not-allowed;
+}
+
+.session-dialog {
+  margin: auto;
+  width: min(28rem, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  padding: clamp(16px, 4vw, 24px);
+  border: 1px solid #cbd5e1;
+  border-radius: 1rem;
+  background: white;
+  color: #0f172a;
+  box-shadow: 0 20px 60px #0f172a33;
+}
+
+.session-dialog::backdrop {
+  background: #0f172a66;
+}
+
+.correction-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.correction-controls > button {
+  flex: 1 1 4rem;
+}
+
+button {
+  overflow-wrap: anywhere;
+}
+
+.session-mode > span {
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.current-metric,
+.total-metric {
+  overflow-wrap: anywhere;
 }

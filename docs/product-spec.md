@@ -20,19 +20,19 @@ The goal is to keep the useful glanceable information while reducing the control
 
 Nothing accumulates.
 
-Primary action: **Start Day**
+Actions: **Start Work** and **Start Break**, or the corresponding total card.
 
-Starting creates a `work` event at the current timestamp.
+Starting creates a `work` or `break` event at the current timestamp.
 
 ### Work mode
 
 Visible:
 
-- Today's Work total
-- Current Session
-- Break Today total
+- Work Total
+- Work Session
+- Break Total
 - **Switch to Break**
-- **Stop Day**
+- **Stop**
 
 Switch to Break creates a `break` event at the current timestamp.
 
@@ -40,19 +40,19 @@ Switch to Break creates a `break` event at the current timestamp.
 
 Visible:
 
-- Today's Work total
-- Current Break
-- Break Today total
+- Work Total
+- Break Session
+- Break Total
 - **Back to Work**
-- **Stop Day**
+- **Stop**
 
 Back to Work creates a `work` event at the current timestamp.
 
-### Stop Day
+### Stop
 
-Stop Day creates a `stopped` event. No timer continues after it.
+Stop creates a `stopped` event. No timer continues after it. History displays a timestamped stop separator. Clear timers is available while stopped and removes all history and totals only after explicit warning confirmation.
 
-The same workday may be resumed later by creating a new `work` event.
+Work or break can be resumed at any later time by appending the corresponding event. History and totals persist across dates without automatic filtering or resets.
 
 ## Correction scenario
 
@@ -65,19 +65,19 @@ Example:
 
 The history initially displays:
 
-| Mode  | Started | Ended | Duration |
-| ----- | ------- | ----- | -------- |
-| Break | 10:00   | 10:25 | 25m      |
-| Work  | 10:25   | Now   | ...      |
+| Mode  | Start / End   | Duration |
+| ----- | ------------- | -------- |
+| Work  | 10:25 –       | ...      |
+| Break | 10:00 – 10:25 | 25:00    |
 
 The user edits the Work start boundary from 10:25 to 10:20.
 
 The result becomes:
 
-| Mode  | Started | Ended | Duration |
-| ----- | ------- | ----- | -------- |
-| Break | 10:00   | 10:20 | 20m      |
-| Work  | 10:20   | Now   | ...      |
+| Mode  | Start / End   | Duration |
+| ----- | ------------- | -------- |
+| Work  | 10:20 –       | ...      |
+| Break | 10:00 – 10:20 | 20:00    |
 
 Only one underlying timestamp changes. The totals recompute automatically.
 

@@ -2,81 +2,52 @@
 
 ## Main timer surface
 
-The page should feel like a calm instrument panel rather than a productivity coach.
+Keep the current timer large at the top, Work Total and Break Total side by side below, and controls beneath them. Timer sizes adjust fluidly; long durations may wrap at colon boundaries to preserve readable text. The totals use less vertical padding than the current timer.
 
 ### Work mode
 
-- Large Today’s Work total
-- Current Session card
-- Break Today card
-- Green primary button: **Switch to Break**
-- Red secondary button: **Stop Day**
-- Work mode badge
+- Work Session and Work Total highlight green.
+- Break Total remains neutral and can be clicked to start a break.
+- Controls: **Switch to Break** and **Stop**.
 
 ### Break mode
 
-- Today’s Work remains visible but inactive
-- Current Break is visually active
-- Break Today continues accumulating
-- Primary button: **Back to Work**
-- Red secondary button: **Stop Day**
-- Break mode badge
+- Break Session and Break Total highlight blue.
+- Work Total remains neutral and can be clicked to return to work.
+- Controls: **Back to Work** and **Stop**.
 
 ### Stopped
 
-- Totals remain visible
-- No time accumulates
-- Primary button: **Start Day**
+- The prominent timer shows combined accumulated Work and Break time, labeled **Total time**.
 
-## Today's Sessions table
+- Totals and history remain visible across calendar dates.
+- No time accumulates.
+- Both total cards can start their corresponding mode.
+- **Start Work** and **Start Break** align with the total cards above.
 
-Place the history underneath the timer cards.
+## Sessions table
 
-Columns:
+Place history below the timer cards without a separate title. Show newest events first. Display stopped events as subtle left-aligned “Timer stopped · 3:53 PM” separators spanning all three columns, without duration or edit controls.
 
-| Mode  | Started  | Ended    | Duration | Action |
-| ----- | -------- | -------- | -------- | ------ |
-| Work  | 9:02 AM  | 10:11 AM | 1h 09m   | Edit   |
-| Break | 10:11 AM | 10:23 AM | 12m      | Edit   |
-| Work  | 10:23 AM | Now      | 42m      | Edit   |
+| Mode  | Start / End      | Duration |
+| ----- | ---------------- | -------- |
+| Work  | 10:23 AM –       | 42:00    |
+| Break | 10:11 – 10:23 AM | 12:00    |
 
-The Ended column is normally derived from the next row's start event. It should not behave like an independent field.
+Keep these three columns and visible headings at every width. Keep each row on one line, with a compact time range such as 3:40 – 3:53 PM in one color. Omit the first AM/PM only when both times share it. Balance the whitespace between the three columns; on narrow screens or enlarged text the history can scroll horizontally without shrinking text or stacking rows. Use MM:SS below one hour and HH:MM:SS from one hour onward. An active session shows its start and the range separator, with nothing after the dash.
 
-## Boundary editing
+## Session editing
 
-Selecting Edit expands an inline editor beneath that row.
+The duration is a 44px-high button with one pencil that appears on hover or keyboard focus and remains visible on touch devices. Clicking opens a modal dialog with Start and End choices, an exact local date/time field, -5/-1/+1/+5 minute corrections, Save, and Cancel. A running session's End choice is disabled. The dialog traps focus; Escape and Cancel close it and return focus to the duration. If another tab clears the session, close its editor and return focus to history.
 
-Controls:
+Explain shared-boundary changes in the editor. Reject invalid dates, future times, and timestamps crossing neighboring events. Validate again against the latest persisted history to handle edits from other tabs.
 
-- -5 min
-- -1 min
-- +1 min
-- +5 min
-- exact local date/time input
-- Save
-- Cancel
-
-Copy should explain the side effect when applicable:
-
-> Changing this start time also changes the end of the previous session.
-
-Save is disabled if the proposed timestamp would be equal to or cross a neighboring event.
-
-## Optional fast correction
-
-A future enhancement can show a temporary shortcut immediately after a mode switch:
-
-- Started now
-- Started 5 min ago
-- Edit start time
-
-This is useful for the common case where the user notices a forgotten switch a few minutes late.
+Stop preserves all history and can be followed immediately by a new work or break session. It needs no confirmation dialog. When stopped with saved history, show Clear timers. Its warning modal explains that all history is deleted and both totals reset; Cancel, Escape, and clicking outside dismiss without changes. Clearing requires explicit confirmation and rechecks that history is unchanged and stopped.
 
 ## Accessibility
 
 - Use semantic buttons and table markup.
-- Give mode/status text in addition to color.
-- Maintain visible focus states.
-- Do not rely on green/red alone.
-- Inline editing must be keyboard usable.
-- Errors should explain the invalid boundary rather than silently clamping it.
+- Give mode text in addition to color.
+- Maintain visible focus states and accessible names for pencil controls.
+- Keep modal editing keyboard usable.
+- Errors explain invalid timestamps rather than silently clamping them.

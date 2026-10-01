@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 const mockedStore = vi.hoisted(() => ({
   snapshot: {
-    dateKey: "",
+    initialized: false,
     events: [] as Array<{
       id: string;
       at: number;
@@ -15,9 +15,9 @@ const mockedStore = vi.hoisted(() => ({
   nextError: null as string | null,
 }));
 
-vi.mock("@/lib/workday-store", () => ({
-  useWorkday: () => mockedStore.snapshot,
-  dispatchWorkday: vi.fn(
+vi.mock("@/lib/timer-store", () => ({
+  useTimer: () => mockedStore.snapshot,
+  dispatchTimer: vi.fn(
     async (
       action:
         | {
@@ -58,14 +58,13 @@ vi.mock("@/lib/workday-store", () => ({
 }));
 
 import { WorkTimer } from "@/components/work-timer";
-import { localDateKey } from "@/lib/storage";
 
 afterEach(cleanup);
 
 describe("WorkTimer", () => {
   beforeEach(() => {
     mockedStore.snapshot = {
-      dateKey: localDateKey(),
+      initialized: true,
       events: [],
       error: null,
     };
@@ -76,14 +75,14 @@ describe("WorkTimer", () => {
     const user = userEvent.setup();
     render(<WorkTimer />);
 
-    expect(screen.getByText("STOPPED")).toBeInTheDocument();
+    expect(screen.getByText("Total time")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Start Day" }));
-    expect(screen.getByText("WORK MODE")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start Work" }));
+    expect(screen.getByText("Work Session")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Switch to Break" }));
 
-    expect(screen.getByText("BREAK MODE")).toBeInTheDocument();
+    expect(screen.getByText("Break Session")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Back to Work" }),
     ).toBeInTheDocument();
@@ -91,19 +90,70 @@ describe("WorkTimer", () => {
     expect(screen.getAllByText(/Break/).length).toBeGreaterThan(0);
   });
 
+  it("shows combined accumulated time when stopped and the current session when running", () => {
+    mockedStore.snapshot.events = [
+      { id: "work", at: 0, state: "work" },
+      { id: "break", at: 60_000, state: "break" },
+      { id: "stop", at: 90_000, state: "stopped" },
+    ];
+    const { rerender } = render(<WorkTimer />);
+    expect(screen.getByRole("timer")).toHaveAccessibleName(
+      "Total time: 0 hours, 1 minutes, 30 seconds",
+    );
+    mockedStore.snapshot.events.push({
+      id: "resume",
+      at: Date.now(),
+      state: "work",
+    });
+    rerender(<WorkTimer />);
+    expect(screen.getByRole("timer")).toHaveAccessibleName(
+      "Work Session: 0 hours, 0 minutes, 0 seconds",
+    );
+  });
+
+  it("switches modes through the totals without restarting the active mode", async () => {
+    const user = userEvent.setup();
+    render(<WorkTimer />);
+
+    const workTotal = screen.getByRole("button", { name: /^Work Total/ });
+    const breakTotal = screen.getByRole("button", { name: /^Break Total/ });
+    expect(breakTotal).toBeEnabled();
+
+    await user.click(workTotal);
+    expect(screen.getByText("Work Session")).toBeInTheDocument();
+    expect(workTotal).toBeDisabled();
+    await user.click(workTotal);
+    expect(mockedStore.snapshot.events).toHaveLength(1);
+
+    await user.click(breakTotal);
+    expect(screen.getByText("Break Session")).toBeInTheDocument();
+    expect(breakTotal).toBeDisabled();
+
+    await user.click(workTotal);
+    expect(screen.getByText("Work Session")).toBeInTheDocument();
+    expect(mockedStore.snapshot.events.map((event) => event.state)).toEqual([
+      "work",
+      "break",
+      "work",
+    ]);
+  });
+
   it("renders store initialization errors and keeps actions disabled", () => {
     mockedStore.snapshot = {
-      dateKey: "",
+      initialized: false,
       events: [],
-      error: "Existing timer data is unreadable.",
+      error: "Could not read timer storage.",
     };
 
     render(<WorkTimer />);
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Existing timer data is unreadable.",
+      "Could not read timer storage.",
     );
-    expect(screen.getByRole("button", { name: "Start Day" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start Work" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start Break" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Work Total/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Break Total/ })).toBeDisabled();
   });
 
   it("surfaces a failed action without changing the visible mode", async () => {
@@ -112,11 +162,11 @@ describe("WorkTimer", () => {
       "Could not save timer data. The change was not applied.";
 
     render(<WorkTimer />);
-    await user.click(screen.getByRole("button", { name: "Start Day" }));
+    await user.click(screen.getByRole("button", { name: "Start Work" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not save timer data. The change was not applied.",
     );
-    expect(screen.getByText("STOPPED")).toBeInTheDocument();
+    expect(screen.getByText("Total time")).toBeInTheDocument();
   });
 });

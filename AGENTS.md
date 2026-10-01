@@ -27,7 +27,9 @@ A visible session is derived from one non-stopped event and the timestamp of the
 Allowed transitions:
 
 - no event -> work
+- no event -> break
 - stopped -> work
+- stopped -> break
 - work -> break
 - work -> stopped
 - break -> work
@@ -35,13 +37,15 @@ Allowed transitions:
 
 Events must remain strictly chronological. Editing a boundary must preserve that ordering.
 
+History is continuous across calendar dates. Never filter or reset events automatically based on the day. Stop only ends accumulation; resuming appends an event.
+
 ## UX rules
 
 - No Pomodoro alarms or forced interruptions.
 - The main action is one toggle between work and break.
 - Switching modes automatically starts a fresh current session.
-- Stop Day stops all accumulation.
-- The session table shows Mode, Started, Ended, Duration, and Edit.
+- Stop stops all accumulation.
+- The session table shows Mode, Start / End, and Duration, newest first. One pencil beside each duration opens a modal to edit the start or end time.
 - Editing a session start edits the underlying transition timestamp, which automatically adjusts the previous session's end.
 - Provide quick corrections for -5, -1, +1, and +5 minutes plus an exact date/time field.
 - Keep keyboard operation, visible focus states, accessible names, and useful empty/error states.

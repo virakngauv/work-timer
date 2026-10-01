@@ -4,11 +4,11 @@ A flexible work/break timer for people who want awareness without Pomodoro-style
 
 The app tracks three things at a glance:
 
-- **Today's Work** — total focused time for the current workday.
-- **Current Session / Current Break** — time since the most recent mode switch.
-- **Break Today** — total break time for the current workday.
+- **Work Total** — accumulated work time across the full history.
+- **Work Session / Break Session** — time since the most recent mode switch.
+- **Break Total** — accumulated break time across the full history.
 
-The primary control is a single toggle: **Switch to Break** while working and **Back to Work** while on break. Every switch creates an explicit state-transition event and starts a fresh current session. **Stop Day** stops all accumulation.
+Start with **Start Work** or **Start Break**, or select a total card. The primary control while active is a single toggle: **Switch to Break** while working and **Back to Work** while on break. Every switch creates an explicit state-transition event and starts a fresh current session. **Stop** stops all accumulation.
 
 ## Why this exists
 
@@ -74,11 +74,11 @@ If the requested port is busy, the dev script probes the next ports (up to ten) 
 
 ## Persistence
 
-The MVP stores workday metadata and individual transition events in browser IndexedDB. Clearing site data clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
+The MVP stores individual transition events in browser IndexedDB. History remains visible across calendar dates, stops, and restarts; nothing resets automatically. **Clear timers**, available after stopping, deletes history and resets both totals after confirmation. Clearing site data also clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
 
-Every timer action and boundary edit runs in one IndexedDB `readwrite` transaction that reads the latest event history, validates the explicit action, and writes only the resulting event change. Overlapping write transactions are serialized by IndexedDB, so cooperating tabs do not rely on cached React state or localStorage visibility for correctness. Repeated requests for the current mode do nothing; incompatible stale requests show an error.
+Every timer action and boundary edit runs in one IndexedDB `readwrite` transaction that reads the latest event history, validates the explicit action, and writes only the resulting event change. Overlapping write transactions are serialized by IndexedDB, so cooperating tabs do not rely on cached React state for correctness. Repeated requests for the current mode do nothing; incompatible stale requests show an error.
 
-A BroadcastChannel only tells other tabs to reread IndexedDB so their UI stays current. Tabs also reread when opened or returned to, so missed notifications do not affect correctness. Existing valid `work-timer:v1` localStorage data is migrated once; malformed legacy data is preserved and reported instead of being replaced.
+A BroadcastChannel only tells other tabs to reread IndexedDB so their UI stays current. Tabs also reread when opened or returned to, so missed notifications do not affect correctness.
 
 ## Repository setup status
 
