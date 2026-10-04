@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 // Use the image tooling shipped with the locked Next.js install.
 const require = createRequire(import.meta.url);
@@ -35,7 +36,7 @@ await sharp(master, { density: 576 })
   .resize(180, 180)
   .flatten({ background: "#fff" })
   .png()
-  .toFile(new URL("../app/apple-icon.png", import.meta.url).pathname);
+  .toFile(fileURLToPath(new URL("../app/apple-icon.png", import.meta.url)));
 
 // Review board: actual raster sizes and enlarged master on both chrome colors.
 const embedded = master.toString("base64");
@@ -58,4 +59,6 @@ await sharp(
   ),
 )
   .png()
-  .toFile(new URL("../docs/favicon-preview.png", import.meta.url).pathname);
+  .toFile(
+    fileURLToPath(new URL("../docs/favicon-preview.png", import.meta.url)),
+  );
