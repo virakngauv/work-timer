@@ -184,13 +184,13 @@ test("keeps the stop button label on one line at small widths", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "Start Work", exact: true }).click();
 
-  const stop = await page
-    .getByRole("button", { name: "Stop", exact: true })
-    .boundingBox();
-  expect(stop).not.toBeNull();
+  const stop = page.getByRole("button", { name: "Stop", exact: true });
+  await expect(stop).toBeVisible();
+  const box = await stop.boundingBox();
+  expect(box).not.toBeNull();
   // The 44px-tall button fits its label on one line; a wrapped label adds a
   // second line box and pushes the height past 56px.
-  expect(stop!.height).toBeLessThan(56);
+  expect(box!.height).toBeLessThan(56);
 });
 
 test("retains stopped history across midnight and later starts", async ({
