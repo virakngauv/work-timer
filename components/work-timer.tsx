@@ -285,7 +285,7 @@ export function WorkTimer() {
               </Button>
               <Button
                 variant="danger"
-                className="stop-action"
+                className="stop-action whitespace-nowrap"
                 onClick={stopTimer}
                 disabled={pending}
               >

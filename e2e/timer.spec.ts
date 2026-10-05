@@ -177,6 +177,22 @@ test("balances session table columns at iPad width", async ({ page }) => {
   expect(Math.abs(gapBefore - gapAfter)).toBeLessThanOrEqual(2);
 });
 
+test("keeps the stop button label on one line at small widths", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start Work", exact: true }).click();
+
+  const stop = page.getByRole("button", { name: "Stop", exact: true });
+  await expect(stop).toBeVisible();
+  const box = await stop.boundingBox();
+  expect(box).not.toBeNull();
+  // The 44px-tall button fits its label on one line; a wrapped label adds a
+  // second line box and pushes the height past 56px.
+  expect(box!.height).toBeLessThan(56);
+});
+
 test("retains stopped history across midnight and later starts", async ({
   page,
 }) => {
