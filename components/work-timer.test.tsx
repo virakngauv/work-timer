@@ -114,6 +114,30 @@ describe("WorkTimer", () => {
     );
   });
 
+  it("preserves tenths in the stopped total without further accumulation", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    mockedStore.snapshot.events = [
+      { id: "work", at: 150, state: "work" },
+      { id: "break", at: 1850, state: "break" },
+      { id: "stop", at: 2450, state: "stopped" },
+    ];
+    render(<WorkTimer />);
+    const total = screen.getByRole("timer");
+    expect(total).toHaveTextContent("00:00:02.3");
+    expect(total).toHaveAccessibleName(
+      "Total time: 0 hours, 0 minutes, 2.3 seconds",
+    );
+    expect(
+      screen.getByRole("button", { name: /^Work Total/ }),
+    ).toHaveTextContent("00:00:01.7");
+    expect(
+      screen.getByRole("button", { name: /^Break Total/ }),
+    ).toHaveTextContent("00:00:00.6");
+    act(() => vi.advanceTimersByTime(5000));
+    expect(total).toHaveTextContent("00:00:02.3");
+  });
+
   it.each(["work", "break"] as const)(
     "updates the %s counters every tenth without adding decimals to the table",
     (state) => {
