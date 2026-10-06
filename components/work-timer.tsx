@@ -32,17 +32,23 @@ function MetricCard({
 }) {
   const toneClasses = {
     work: active
-      ? "border-emerald-300 bg-emerald-50"
-      : "border-slate-200 bg-white",
-    break: active ? "border-sky-300 bg-sky-50" : "border-slate-200 bg-white",
-    neutral: "border-slate-200 bg-white",
+      ? "border-emerald-700 bg-emerald-700 text-white"
+      : "border-slate-200 bg-white text-slate-950",
+    break: active
+      ? "border-sky-700 bg-sky-700 text-white"
+      : "border-slate-200 bg-white text-slate-950",
+    neutral: "border-slate-200 bg-white text-slate-950",
   };
 
   return (
     <div
       className={`@container min-w-0 rounded-2xl border ${prominent ? "current-metric" : "total-metric"} ${toneClasses[tone]}`}
     >
-      <div className="text-sm font-semibold text-slate-700">{label}</div>
+      <div
+        className={`text-sm font-semibold ${active ? "text-white" : "text-slate-700"}`}
+      >
+        {label}
+      </div>
       <div
         className={`timer-value tabular ${prominent ? "current-value" : "total-value"}`}
         role={prominent ? "timer" : undefined}
@@ -51,7 +57,10 @@ function MetricCard({
       >
         {value.split(":").map((part, index) => (
           <span key={index}>
-            {part}
+            {part.split(".")[0]}
+            {part.includes(".") ? (
+              <span className="timer-tenths">.{part.split(".")[1]}</span>
+            ) : null}
             {index < 2 ? ":" : ""}
           </span>
         ))}
