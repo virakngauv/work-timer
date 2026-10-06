@@ -6,7 +6,7 @@ import { SessionTable } from "@/components/session-table";
 import {
   calculateTotals,
   currentState,
-  formatDuration,
+  formatLiveDuration,
   type TimerEvent,
   type TimerState,
 } from "@/lib/timer";
@@ -121,14 +121,14 @@ export function WorkTimer() {
     let timeout: number;
     function tick() {
       setNow(Date.now());
-      timeout = window.setTimeout(tick, 1001 - (Date.now() % 1000));
+      timeout = window.setTimeout(tick, 101 - (Date.now() % 100));
     }
-    timeout = window.setTimeout(tick, 1001 - (Date.now() % 1000));
+    timeout = window.setTimeout(tick, 101 - (Date.now() % 100));
     return () => window.clearTimeout(timeout);
   }, [state]);
 
   const completedTotals = useMemo(
-    () => calculateTotals(events, events.at(-1)?.at ?? 0),
+    () => calculateTotals(events, events.at(-1)?.at ?? 0, 100),
     [events],
   );
   const currentMs =
@@ -136,9 +136,8 @@ export function WorkTimer() {
       ? 0
       : Math.max(
           0,
-          Math.floor(now / 1000) -
-            Math.floor((events.at(-1)?.at ?? now) / 1000),
-        ) * 1000;
+          Math.floor(now / 100) - Math.floor((events.at(-1)?.at ?? now) / 100),
+        ) * 100;
   const totals = {
     workMs: completedTotals.workMs + (state === "work" ? currentMs : 0),
     breakMs: completedTotals.breakMs + (state === "break" ? currentMs : 0),
@@ -214,7 +213,7 @@ export function WorkTimer() {
         <MetricCard
           label={currentLabel}
           prominent
-          value={formatDuration(prominentMs)}
+          value={formatLiveDuration(prominentMs)}
           active={state !== "stopped"}
           tone={state === "break" ? "break" : "work"}
         />
@@ -223,13 +222,13 @@ export function WorkTimer() {
           <button
             type="button"
             className="min-w-0 rounded-2xl text-left enabled:cursor-pointer disabled:cursor-default"
-            aria-label={`Work Total: ${durationLabel(formatDuration(totals.workMs))}. ${state === "work" ? "Currently working" : "Start work"}`}
+            aria-label={`Work Total: ${durationLabel(formatLiveDuration(totals.workMs))}. ${state === "work" ? "Currently working" : "Start work"}`}
             disabled={!hydrated || pending || state === "work"}
             onClick={() => transition("work")}
           >
             <MetricCard
               label="Work Total"
-              value={formatDuration(totals.workMs)}
+              value={formatLiveDuration(totals.workMs)}
               active={state === "work"}
               tone="work"
             />
@@ -237,13 +236,13 @@ export function WorkTimer() {
           <button
             type="button"
             className="min-w-0 rounded-2xl text-left enabled:cursor-pointer disabled:cursor-default"
-            aria-label={`Break Total: ${durationLabel(formatDuration(totals.breakMs))}. ${state === "break" ? "Currently on break" : "Start break"}`}
+            aria-label={`Break Total: ${durationLabel(formatLiveDuration(totals.breakMs))}. ${state === "break" ? "Currently on break" : "Start break"}`}
             disabled={!hydrated || pending || state === "break"}
             onClick={() => transition("break")}
           >
             <MetricCard
               label="Break Total"
-              value={formatDuration(totals.breakMs)}
+              value={formatLiveDuration(totals.breakMs)}
               active={state === "break"}
               tone="break"
             />
