@@ -227,7 +227,7 @@ export function WorkTimer() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl p-[clamp(12px,3vw,24px)]">
-      <header className="flex h-12 items-center justify-between">
+      <header className="relative h-7">
         <h1 className="text-xs font-semibold text-slate-500">Work Timer</h1>
         <button
           ref={clearTriggerRef}
@@ -235,7 +235,7 @@ export function WorkTimer() {
           aria-label="Clear timers"
           title="Clear timers"
           aria-haspopup="dialog"
-          className="relative z-10 mr-6 flex min-h-11 min-w-11 translate-y-px cursor-pointer items-center justify-center self-end rounded-t-2xl border border-b-0 border-slate-200 bg-white/85 text-red-700 hover:bg-slate-50"
+          className="absolute top-px right-6 z-10 flex h-7 min-w-11 cursor-pointer items-center justify-center rounded-t-xl border border-b-0 border-slate-200 bg-white/85 text-red-700 hover:bg-slate-50"
           onClick={() => {
             setClearSnapshotReady(hydrated && !pending);
             setClearEvents([...events]);
