@@ -7,7 +7,14 @@ import {
   it,
   vi,
 } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockedStore = vi.hoisted(() => ({
@@ -248,6 +255,40 @@ describe("WorkTimer", () => {
       expectedEvents: committed,
     });
   });
+
+  it.each(["Cancel", "Escape", "outside"])(
+    "dismisses Clear with %s while another action is still pending",
+    async (dismissal) => {
+      const user = userEvent.setup();
+      mockedStore.snapshot.events = [
+        { id: "work", at: Date.now(), state: "work" },
+      ];
+      let complete!: () => void;
+      vi.mocked(dispatchTimer).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            complete = resolve;
+          }),
+      );
+      render(<WorkTimer />);
+      await user.click(
+        screen.getByRole("button", { name: "Switch timer to break" }),
+      );
+      const trigger = screen.getByRole("button", { name: "Clear timers" });
+      await user.click(trigger);
+      const dialog = screen.getByRole("dialog", { name: "Clear all timers?" });
+      const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+      expect(cancel).toBeEnabled();
+      if (dismissal === "Cancel") await user.click(cancel);
+      else if (dismissal === "Escape")
+        fireEvent(dialog, new Event("cancel", { cancelable: true }));
+      else fireEvent.click(dialog, { clientX: -1, clientY: -1 });
+      expect(dialog).not.toHaveAttribute("open");
+      expect(trigger).toHaveFocus();
+      expect(mockedStore.snapshot.events).toHaveLength(1);
+      await act(async () => complete());
+    },
+  );
 
   it("preserves tenths in the stopped total without further accumulation", () => {
     vi.useFakeTimers();

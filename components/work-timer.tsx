@@ -78,6 +78,7 @@ export function WorkTimer() {
   const [pending, setPending] = useState(false);
   const [clearEvents, setClearEvents] = useState<TimerEvent[] | null>(null);
   const [clearSnapshotReady, setClearSnapshotReady] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
   const clearDialogRef = useRef<HTMLDialogElement>(null);
   const clearDialogOpenRef = useRef(false);
@@ -96,7 +97,11 @@ export function WorkTimer() {
   }, [clearEvents]);
 
   useEffect(() => {
-    if (!clearEvents && !pending && restoreClearFocusRef.current) {
+    if (
+      !clearEvents &&
+      (!clearedRef.current || !pending) &&
+      restoreClearFocusRef.current
+    ) {
       const target = (clearedRef.current ? startWorkRef : clearTriggerRef)
         .current;
       (target ?? timerSurfaceRef.current)?.focus();
@@ -116,12 +121,17 @@ export function WorkTimer() {
   async function clearTimers() {
     if (!clearEvents || !clearSnapshotReady || !history.initialized || pending)
       return;
-    const error = await performAction({
-      type: "clear",
-      expectedEvents: clearEvents,
-    });
-    if (error) setClearError(error);
-    else closeClearDialog(true);
+    setClearing(true);
+    try {
+      const error = await performAction({
+        type: "clear",
+        expectedEvents: clearEvents,
+      });
+      if (error) setClearError(error);
+      else closeClearDialog(true);
+    } finally {
+      setClearing(false);
+    }
   }
 
   const displayedError = actionError ?? history.error;
@@ -379,10 +389,10 @@ export function WorkTimer() {
         }}
         onCancel={(event) => {
           event.preventDefault();
-          if (!pending) closeClearDialog();
+          if (!clearing) closeClearDialog();
         }}
         onClick={(event) => {
-          if (event.target !== event.currentTarget || pending) return;
+          if (event.target !== event.currentTarget || clearing) return;
           const bounds = event.currentTarget.getBoundingClientRect();
           if (
             event.clientX < bounds.left ||
@@ -410,7 +420,7 @@ export function WorkTimer() {
             <Button
               ref={cancelClearRef}
               variant="secondary"
-              disabled={pending}
+              disabled={clearing}
               onClick={() => closeClearDialog()}
             >
               Cancel
