@@ -208,14 +208,33 @@ describe("history actions", () => {
     });
   });
 
-  it("rejects clearing a running timer", () => {
-    expect(() =>
+  it.each(["work", "break"] as const)("clears a running %s timer", (state) => {
+    const history: TimerHistory = {
+      events: [{ id: "active", at: start, state }],
+    };
+    const result = applyTimerAction(
+      history,
+      { type: "clear", expectedEvents: history.events },
+      start + 60_000,
+    );
+    expect(result.mutation).toEqual({ type: "clear" });
+    expect(result.history.events).toEqual([]);
+    expect(calculateTotals(result.history.events, start + 120_000)).toEqual({
+      workMs: 0,
+      breakMs: 0,
+      currentMs: 0,
+      state: "stopped",
+    });
+  });
+
+  it("clearing empty history is a no-op", () => {
+    expect(
       applyTimerAction(
-        base,
-        { type: "clear", expectedEvents: base.events },
-        start + 60_000,
-      ),
-    ).toThrow("Stop the timer");
+        { events: [] },
+        { type: "clear", expectedEvents: [] },
+        start,
+      ).mutation,
+    ).toEqual({ type: "none" });
   });
 
   it("rejects a confirmation after history is edited in another tab", () => {

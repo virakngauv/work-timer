@@ -150,6 +150,53 @@ test("work to break flow creates editable history", async ({ page }) => {
   await expect(page.getByRole("button", { name: "-5 min" })).toBeVisible();
 });
 
+test("main timer switches modes with pointer and keyboard and persists boundaries", async ({
+  page,
+  browserName,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Total time", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Start Work", exact: true }).click();
+  const timer = page.getByRole("button", { name: /^Switch timer to/ });
+  await expect(timer.getByText("⇄", { exact: true })).toBeVisible();
+  await timer.click();
+  await expect(timer).toHaveAccessibleName("Switch timer to work");
+  await timer.focus();
+  await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+  await page.keyboard.press(
+    browserName === "webkit" ? "Alt+Shift+Tab" : "Shift+Tab",
+  );
+  await expect(timer).toBeFocused();
+  expect(
+    await timer.evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).toBe("solid");
+  await timer.press("Enter");
+  await expect(timer).toHaveAccessibleName("Switch timer to break");
+  await timer.press("Space");
+  await expect(timer).toHaveAccessibleName("Switch timer to work");
+  const history = await readIndexedHistory(page);
+  expect(history.events.map((event) => event.state)).toEqual([
+    "work",
+    "break",
+    "work",
+    "break",
+  ]);
+  for (let index = 1; index < history.events.length; index++) {
+    expect(history.events[index].at).toBeGreaterThan(
+      history.events[index - 1].at,
+    );
+  }
+  await page.reload();
+  await expect(page.getByText("Break Session")).toBeVisible();
+  expect(await readIndexedHistory(page)).toEqual(history);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Total time", exact: true }),
+  ).toBeDisabled();
+});
+
 test("balances session table columns at iPad width", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 1024 });
   await page.goto("/");
@@ -476,12 +523,11 @@ test("clearing timers requires confirmation and can be dismissed safely", async 
   ]);
   await expect(
     page.getByRole("button", { name: "Clear timers", exact: true }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  ).toBeEnabled();
   const original = await readIndexedHistory(page);
   const other = await context.newPage();
   await other.goto("/");
-  await expect(other.getByText("Total time", { exact: true })).toBeVisible();
+  await expect(other.getByText("Break Session", { exact: true })).toBeVisible();
   const trigger = page.getByRole("button", {
     name: "Clear timers",
     exact: true,
@@ -526,6 +572,45 @@ test("clearing timers requires confirmation and can be dismissed safely", async 
   ).toBeVisible();
 });
 
+for (const width of [320, 1280]) {
+  test(`timer panel stays the same height across modes at ${width}px`, async ({
+    page,
+    browserName,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    await page.goto("/");
+    const clear = page.getByRole("button", {
+      name: "Clear timers",
+      exact: true,
+    });
+    await expect(clear).toBeEnabled();
+    await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+    await expect(clear).toBeFocused();
+    expect(
+      await clear.evaluate((element) => getComputedStyle(element).outlineStyle),
+    ).toBe("solid");
+    await clear.click();
+    const dialog = page.getByRole("dialog", { name: "Clear all timers?" });
+    await dialog.getByRole("button", { name: "Clear timers" }).click();
+    await expect(dialog).not.toBeVisible();
+    const panel = page.getByRole("region", { name: "Timer", exact: true });
+    const baseline = await panel.boundingBox();
+    const clearBaseline = await clear.boundingBox();
+    expect(baseline).not.toBeNull();
+    expect(clearBaseline).not.toBeNull();
+    for (const action of ["Start Work", "Switch timer to break", "Stop"]) {
+      await page.getByRole("button", { name: action, exact: true }).click();
+      await expect(clear).toBeEnabled();
+      const box = await panel.boundingBox();
+      const clearBox = await clear.boundingBox();
+      expect(box!.height).toBeCloseTo(baseline!.height, 1);
+      expect(box!.y).toBeCloseTo(baseline!.y, 1);
+      expect(clearBox!.y).toBeCloseTo(clearBaseline!.y, 1);
+      expect(clearBox!.height).toBeCloseTo(clearBaseline!.height, 1);
+    }
+  });
+}
+
 test("a stale clear confirmation cannot erase a newly running timer", async ({
   page,
   context,
@@ -542,17 +627,16 @@ test("a stale clear confirmation cannot erase a newly running timer", async ({
   const dialog = page.getByRole("dialog", { name: "Clear all timers?" });
   await dialog.getByRole("button", { name: "Clear timers" }).click();
   await expect(dialog.getByRole("alert")).toHaveText(
-    "Stop the timer before clearing it.",
+    "Timer history changed. Cancel and review it before clearing.",
   );
   expect((await readIndexedHistory(page)).events).toHaveLength(3);
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  const timerRegion = page.getByRole("region", { name: "Timer", exact: true });
-  await expect(timerRegion).toBeFocused();
-  expect(
-    await timerRegion.evaluate(
-      (element) => getComputedStyle(element).outlineStyle,
-    ),
-  ).toBe("solid");
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  const trigger = page.getByRole("button", {
+    name: "Clear timers",
+    exact: true,
+  });
+  await expect(trigger).toBeFocused();
 });
 
 test("a failed clear preserves history and keeps the warning open", async ({

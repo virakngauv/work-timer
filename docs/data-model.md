@@ -116,7 +116,7 @@ Benefits:
 - instant local startup
 - atomic cross-tab mutations for a personal single-device tool
 
-Explicit clearing requires stopped, unchanged history and runs atomically in the same transaction.
+Explicit clearing requires unchanged history and runs atomically in the same transaction.
 
 Tradeoff: clearing site data removes history and there is no device sync.
 

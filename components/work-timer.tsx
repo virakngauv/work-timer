@@ -77,6 +77,8 @@ export function WorkTimer() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [clearEvents, setClearEvents] = useState<TimerEvent[] | null>(null);
+  const [clearSnapshotReady, setClearSnapshotReady] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
   const clearDialogRef = useRef<HTMLDialogElement>(null);
   const clearDialogOpenRef = useRef(false);
@@ -95,7 +97,11 @@ export function WorkTimer() {
   }, [clearEvents]);
 
   useEffect(() => {
-    if (!clearEvents && !pending && restoreClearFocusRef.current) {
+    if (
+      !clearEvents &&
+      (!clearedRef.current || !pending) &&
+      restoreClearFocusRef.current
+    ) {
       const target = (clearedRef.current ? startWorkRef : clearTriggerRef)
         .current;
       (target ?? timerSurfaceRef.current)?.focus();
@@ -113,17 +119,29 @@ export function WorkTimer() {
   }
 
   async function clearTimers() {
-    if (!clearEvents) return;
-    const error = await performAction({
-      type: "clear",
-      expectedEvents: clearEvents,
-    });
-    if (error) setClearError(error);
-    else closeClearDialog(true);
+    if (!clearEvents || !clearSnapshotReady || !history.initialized || pending)
+      return;
+    setClearing(true);
+    try {
+      const error = await performAction({
+        type: "clear",
+        expectedEvents: clearEvents,
+      });
+      if (error) setClearError(error);
+      else closeClearDialog(true);
+    } finally {
+      setClearing(false);
+    }
   }
 
   const displayedError = actionError ?? history.error;
   const hydrated = history.initialized;
+
+  // Freeze the first available history when the dialog opened during loading or saving.
+  if (clearEvents && !clearSnapshotReady && hydrated && !pending) {
+    setClearEvents([...events]);
+    setClearSnapshotReady(true);
+  }
 
   useEffect(() => {
     if (state === "stopped") return;
@@ -209,8 +227,35 @@ export function WorkTimer() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl p-[clamp(12px,3vw,24px)]">
-      <header className="mb-3">
+      <header className="relative h-7">
         <h1 className="text-xs font-semibold text-slate-500">Work Timer</h1>
+        <button
+          ref={clearTriggerRef}
+          type="button"
+          aria-label="Clear timers"
+          title="Clear timers"
+          aria-haspopup="dialog"
+          className="absolute top-px right-6 z-10 flex h-7 min-w-11 cursor-pointer items-center justify-center rounded-t-xl border border-b-0 border-slate-200 bg-white/85 text-red-700 hover:bg-slate-50"
+          onClick={() => {
+            setClearSnapshotReady(hydrated && !pending);
+            setClearEvents([...events]);
+            setClearError(null);
+          }}
+        >
+          <svg
+            aria-hidden="true"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7" />
+          </svg>
+        </button>
       </header>
 
       <section
@@ -219,13 +264,37 @@ export function WorkTimer() {
         aria-label="Timer"
         className="rounded-3xl border border-slate-200 bg-white/85 p-[clamp(12px,3vw,24px)] shadow-xl shadow-slate-200/50 backdrop-blur"
       >
-        <MetricCard
-          label={currentLabel}
-          prominent
-          value={formatLiveDuration(prominentMs)}
-          active={state !== "stopped"}
-          tone={state === "break" ? "break" : "work"}
-        />
+        <div className="relative">
+          <MetricCard
+            label={currentLabel}
+            prominent
+            value={formatLiveDuration(prominentMs)}
+            active={state !== "stopped"}
+            tone={state === "break" ? "break" : "work"}
+          />
+          <button
+            type="button"
+            className="absolute inset-0 w-full rounded-2xl enabled:cursor-pointer disabled:cursor-default"
+            aria-label={
+              state === "stopped"
+                ? "Total time"
+                : state === "work"
+                  ? "Switch timer to break"
+                  : "Switch timer to work"
+            }
+            disabled={!hydrated || pending || state === "stopped"}
+            onClick={toggleMode}
+          >
+            {state !== "stopped" ? (
+              <span
+                aria-hidden="true"
+                className="absolute right-4 top-3 text-2xl leading-none text-white"
+              >
+                ⇄
+              </span>
+            ) : null}
+          </button>
+        </div>
 
         <div className="totals-grid">
           <button
@@ -303,23 +372,6 @@ export function WorkTimer() {
           )}
         </div>
 
-        {state === "stopped" && events.length > 0 ? (
-          <div className="mt-2 flex justify-end">
-            <Button
-              ref={clearTriggerRef}
-              variant="ghost"
-              aria-haspopup="dialog"
-              disabled={!hydrated || pending}
-              onClick={() => {
-                setClearEvents([...events]);
-                setClearError(null);
-              }}
-            >
-              Clear timers
-            </Button>
-          </div>
-        ) : null}
-
         {displayedError ? (
           <p role="alert" className="mt-2 text-sm font-medium text-red-600">
             {displayedError}
@@ -337,10 +389,10 @@ export function WorkTimer() {
         }}
         onCancel={(event) => {
           event.preventDefault();
-          if (!pending) closeClearDialog();
+          if (!clearing) closeClearDialog();
         }}
         onClick={(event) => {
-          if (event.target !== event.currentTarget || pending) return;
+          if (event.target !== event.currentTarget || clearing) return;
           const bounds = event.currentTarget.getBoundingClientRect();
           if (
             event.clientX < bounds.left ||
@@ -356,8 +408,8 @@ export function WorkTimer() {
             Clear all timers?
           </h2>
           <p id="clear-dialog-description" className="text-sm text-slate-600">
-            This deletes all session history and resets Work and Break totals to
-            zero. This cannot be undone.
+            This stops any running timer, deletes all session history, and
+            resets Work and Break totals to zero. This cannot be undone.
           </p>
           {clearError ? (
             <p role="alert" className="text-sm font-medium text-red-700">
@@ -368,12 +420,16 @@ export function WorkTimer() {
             <Button
               ref={cancelClearRef}
               variant="secondary"
-              disabled={pending}
+              disabled={clearing}
               onClick={() => closeClearDialog()}
             >
               Cancel
             </Button>
-            <Button variant="danger" disabled={pending} onClick={clearTimers}>
+            <Button
+              variant="danger"
+              disabled={!hydrated || pending || !clearSnapshotReady}
+              onClick={clearTimers}
+            >
               Clear timers
             </Button>
           </div>

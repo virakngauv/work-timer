@@ -74,7 +74,7 @@ If the requested port is busy, the dev script probes the next ports (up to ten) 
 
 ## Persistence
 
-The MVP stores individual transition events in browser IndexedDB. History remains visible across calendar dates, stops, and restarts; nothing resets automatically. **Clear timers**, available after stopping, deletes history and resets both totals after confirmation. Clearing site data also clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
+The MVP stores individual transition events in browser IndexedDB. History remains visible across calendar dates, stops, and restarts; nothing resets automatically. **Clear timers** is always available from the red trash icon at the upper-right edge of the timer panel. Confirmation stops any running timer, deletes history, and resets both totals. Clearing site data also clears timer history. This is deliberate for the first version; no account, hosted database, or paid service is required.
 
 Every timer action and boundary edit runs in one IndexedDB `readwrite` transaction that reads the latest event history, validates the explicit action, and writes only the resulting event change. Overlapping write transactions are serialized by IndexedDB, so cooperating tabs do not rely on cached React state for correctness. Repeated requests for the current mode do nothing; incompatible stale requests show an error.
 

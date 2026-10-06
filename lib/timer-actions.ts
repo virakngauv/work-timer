@@ -37,9 +37,6 @@ export function applyTimerAction(
   createId: () => string = createEventId,
 ): AppliedTimerAction {
   if (action.type === "clear") {
-    if (currentState(latest.events) !== "stopped") {
-      throw new Error("Stop the timer before clearing it.");
-    }
     if (
       latest.events.length !== action.expectedEvents.length ||
       latest.events.some((event, index) => {

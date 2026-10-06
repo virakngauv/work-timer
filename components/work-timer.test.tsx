@@ -1,5 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockedStore = vi.hoisted(() => ({
@@ -25,9 +40,15 @@ vi.mock("@/lib/timer-store", () => ({
             from: "work" | "break" | "stopped";
             state: "work" | "break" | "stopped";
           }
-        | { type: "edit"; eventId: string; at: number },
+        | { type: "edit"; eventId: string; at: number }
+        | { type: "clear"; expectedEvents: typeof mockedStore.snapshot.events },
     ) => {
       if (mockedStore.nextError) throw new Error(mockedStore.nextError);
+
+      if (action.type === "clear") {
+        mockedStore.snapshot = { ...mockedStore.snapshot, events: [] };
+        return;
+      }
 
       if (action.type === "transition") {
         const current = mockedStore.snapshot.events.at(-1)?.state ?? "stopped";
@@ -58,6 +79,16 @@ vi.mock("@/lib/timer-store", () => ({
 }));
 
 import { WorkTimer } from "@/components/work-timer";
+import { dispatchTimer } from "@/lib/timer-store";
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
+});
 
 afterEach(() => {
   cleanup();
@@ -66,6 +97,7 @@ afterEach(() => {
 
 describe("WorkTimer", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockedStore.snapshot = {
       initialized: true,
       events: [],
@@ -113,6 +145,150 @@ describe("WorkTimer", () => {
       "Work Session: 0 hours, 0 minutes, 0 seconds",
     );
   });
+
+  it("switches the main timer by click, Enter, and Space", async () => {
+    const user = userEvent.setup();
+    render(<WorkTimer />);
+    expect(screen.getByRole("button", { name: "Total time" })).toBeDisabled();
+    expect(screen.queryByText("⇄")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start Work" }));
+    const timer = screen.getByRole("button", { name: "Switch timer to break" });
+    expect(timer).not.toContainElement(screen.getByRole("timer"));
+    expect(screen.getByText("⇄")).toHaveAttribute("aria-hidden", "true");
+    await user.click(timer);
+    expect(timer).toHaveAccessibleName("Switch timer to work");
+    timer.focus();
+    await user.keyboard("{Enter}");
+    expect(timer).toHaveAccessibleName("Switch timer to break");
+    await user.keyboard(" ");
+    expect(mockedStore.snapshot.events.map((event) => event.state)).toEqual([
+      "work",
+      "break",
+      "work",
+      "break",
+    ]);
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(timer).toBeDisabled();
+    expect(screen.queryByText("⇄")).not.toBeInTheDocument();
+  });
+
+  it("disables the main timer while a transition is pending", async () => {
+    const user = userEvent.setup();
+    mockedStore.snapshot.events = [
+      { id: "work", at: Date.now(), state: "work" },
+    ];
+    let complete!: () => void;
+    vi.mocked(dispatchTimer).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    render(<WorkTimer />);
+    const timer = screen.getByRole("button", { name: "Switch timer to break" });
+    await user.click(timer);
+    expect(timer).toBeDisabled();
+    expect(screen.getByText("⇄")).toBeVisible();
+    await act(async () => complete());
+    expect(timer).toBeEnabled();
+  });
+
+  it("opens Clear before hydration and freezes the first loaded history", async () => {
+    const user = userEvent.setup();
+    mockedStore.snapshot.initialized = false;
+    const { rerender } = render(<WorkTimer />);
+    const trigger = screen.getByRole("button", { name: "Clear timers" });
+    expect(trigger).toBeEnabled();
+    await user.click(trigger);
+    const confirm = within(
+      screen.getByRole("dialog", { name: "Clear all timers?" }),
+    ).getByRole("button", { name: "Clear timers" });
+    expect(confirm).toBeDisabled();
+    const loaded = [{ id: "work", at: Date.now(), state: "work" as const }];
+    mockedStore.snapshot = { initialized: true, events: loaded, error: null };
+    rerender(<WorkTimer />);
+    expect(confirm).toBeEnabled();
+    mockedStore.snapshot.events = [
+      ...loaded,
+      { id: "break", at: Date.now() + 1, state: "break" },
+    ];
+    rerender(<WorkTimer />);
+    await user.click(confirm);
+    expect(dispatchTimer).toHaveBeenLastCalledWith({
+      type: "clear",
+      expectedEvents: loaded,
+    });
+  });
+
+  it("opens Clear during a save and captures the committed history", async () => {
+    const user = userEvent.setup();
+    const initial = [{ id: "work", at: Date.now(), state: "work" as const }];
+    mockedStore.snapshot.events = initial;
+    let complete!: () => void;
+    vi.mocked(dispatchTimer).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    render(<WorkTimer />);
+    await user.click(
+      screen.getByRole("button", { name: "Switch timer to break" }),
+    );
+    const trigger = screen.getByRole("button", { name: "Clear timers" });
+    expect(trigger).toBeEnabled();
+    await user.click(trigger);
+    const confirm = within(
+      screen.getByRole("dialog", { name: "Clear all timers?" }),
+    ).getByRole("button", { name: "Clear timers" });
+    expect(confirm).toBeDisabled();
+    const committed = [
+      ...initial,
+      { id: "break", at: Date.now() + 1, state: "break" as const },
+    ];
+    mockedStore.snapshot.events = committed;
+    await act(async () => complete());
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    expect(dispatchTimer).toHaveBeenLastCalledWith({
+      type: "clear",
+      expectedEvents: committed,
+    });
+  });
+
+  it.each(["Cancel", "Escape", "outside"])(
+    "dismisses Clear with %s while another action is still pending",
+    async (dismissal) => {
+      const user = userEvent.setup();
+      mockedStore.snapshot.events = [
+        { id: "work", at: Date.now(), state: "work" },
+      ];
+      let complete!: () => void;
+      vi.mocked(dispatchTimer).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            complete = resolve;
+          }),
+      );
+      render(<WorkTimer />);
+      await user.click(
+        screen.getByRole("button", { name: "Switch timer to break" }),
+      );
+      const trigger = screen.getByRole("button", { name: "Clear timers" });
+      await user.click(trigger);
+      const dialog = screen.getByRole("dialog", { name: "Clear all timers?" });
+      const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+      expect(cancel).toBeEnabled();
+      if (dismissal === "Cancel") await user.click(cancel);
+      else if (dismissal === "Escape")
+        fireEvent(dialog, new Event("cancel", { cancelable: true }));
+      else fireEvent.click(dialog, { clientX: -1, clientY: -1 });
+      expect(dialog).not.toHaveAttribute("open");
+      expect(trigger).toHaveFocus();
+      expect(mockedStore.snapshot.events).toHaveLength(1);
+      await act(async () => complete());
+    },
+  );
 
   it("preserves tenths in the stopped total without further accumulation", () => {
     vi.useFakeTimers();
@@ -213,6 +389,7 @@ describe("WorkTimer", () => {
     expect(screen.getByRole("button", { name: "Start Break" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Work Total/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Break Total/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Total time" })).toBeDisabled();
   });
 
   it("surfaces a failed action without changing the visible mode", async () => {

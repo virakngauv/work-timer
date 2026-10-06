@@ -42,7 +42,7 @@ The duration is a 44px-high button with one pencil that appears on hover or keyb
 
 Explain shared-boundary changes in the editor. Reject invalid dates, future times, and timestamps crossing neighboring events. Validate again against the latest persisted history to handle edits from other tabs.
 
-Stop preserves all history and can be followed immediately by a new work or break session. It needs no confirmation dialog. When stopped with saved history, show Clear timers. Its warning modal explains that all history is deleted and both totals reset; Cancel, Escape, and clicking outside dismiss without changes. Clearing requires explicit confirmation and rechecks that history is unchanged and stopped.
+Stop preserves all history and can be followed immediately by a new work or break session. It needs no confirmation dialog. An always-available neutral trash tab with a red icon sits at the upper-right edge of the timer panel and opens Clear timers. Its warning modal explains that all history is deleted and both totals reset; Cancel, Escape, and clicking outside dismiss without changes. Clearing requires explicit confirmation and rechecks that history is unchanged. Confirmation also stops any running timer.
 
 ## Accessibility
 
