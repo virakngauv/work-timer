@@ -79,7 +79,6 @@ section[tabindex="-1"]:focus {
 .timer-value {
   display: flex;
   flex-wrap: wrap;
-  color: #020617;
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.15;
@@ -88,6 +87,10 @@ section[tabindex="-1"]:focus {
 .timer-value > span {
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+.timer-tenths {
+  font-size: 0.5em;
 }
 
 .current-value {

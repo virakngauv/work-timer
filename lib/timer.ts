@@ -66,6 +66,7 @@ export function appendTransition(
 export function deriveSegments(
   events: TimerEvent[],
   now: number,
+  precisionMs: 100 | 1000 = 1000,
 ): TimerSegment[] {
   return events.flatMap((event, index) => {
     if (event.state === "stopped") return [];
@@ -81,12 +82,13 @@ export function deriveSegments(
         startedAt: event.at,
         endedAt,
         // Quantize shared boundaries before subtraction so all active counters
-        // advance together, without accumulating fractional seconds from history.
+        // advance together at the requested display precision.
         durationMs:
           Math.max(
             0,
-            Math.floor(effectiveEnd / 1000) - Math.floor(event.at / 1000),
-          ) * 1000,
+            Math.floor(effectiveEnd / precisionMs) -
+              Math.floor(event.at / precisionMs),
+          ) * precisionMs,
         active: endedAt === null,
       },
     ];
@@ -96,8 +98,9 @@ export function deriveSegments(
 export function calculateTotals(
   events: TimerEvent[],
   now: number,
+  precisionMs: 100 | 1000 = 1000,
 ): TimerTotals {
-  const segments = deriveSegments(events, now);
+  const segments = deriveSegments(events, now, precisionMs);
   const state = currentState(events);
 
   const workMs = segments
@@ -146,6 +149,11 @@ export function formatDuration(ms: number): string {
   return [hours, minutes, seconds]
     .map((part) => part.toString().padStart(2, "0"))
     .join(":");
+}
+
+export function formatLiveDuration(ms: number): string {
+  const tenths = Math.max(0, Math.floor(ms / 100));
+  return `${formatDuration(tenths * 100)}.${tenths % 10}`;
 }
 
 export function formatSessionDuration(ms: number): string {

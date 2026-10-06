@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockedStore = vi.hoisted(() => ({
@@ -59,7 +59,10 @@ vi.mock("@/lib/timer-store", () => ({
 
 import { WorkTimer } from "@/components/work-timer";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("WorkTimer", () => {
   beforeEach(() => {
@@ -110,6 +113,62 @@ describe("WorkTimer", () => {
       "Work Session: 0 hours, 0 minutes, 0 seconds",
     );
   });
+
+  it("preserves tenths in the stopped total without further accumulation", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    mockedStore.snapshot.events = [
+      { id: "work", at: 150, state: "work" },
+      { id: "break", at: 1850, state: "break" },
+      { id: "stop", at: 2450, state: "stopped" },
+    ];
+    render(<WorkTimer />);
+    const total = screen.getByRole("timer");
+    expect(total).toHaveTextContent("00:00:02.3");
+    expect(total).toHaveAccessibleName(
+      "Total time: 0 hours, 0 minutes, 2.3 seconds",
+    );
+    expect(
+      screen.getByRole("button", { name: /^Work Total/ }),
+    ).toHaveTextContent("00:00:01.7");
+    expect(
+      screen.getByRole("button", { name: /^Break Total/ }),
+    ).toHaveTextContent("00:00:00.6");
+    act(() => vi.advanceTimersByTime(5000));
+    expect(total).toHaveTextContent("00:00:02.3");
+  });
+
+  it.each(["work", "break"] as const)(
+    "updates the %s counters every tenth without adding decimals to the table",
+    (state) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(2350);
+      mockedStore.snapshot.events = [
+        { id: "first", at: 150, state },
+        { id: "other", at: 1850, state: state === "work" ? "break" : "work" },
+        { id: "current", at: 2350, state },
+      ];
+      render(<WorkTimer />);
+      const current = screen.getByRole("timer");
+      const total = screen.getByRole("button", {
+        name: state === "work" ? /^Work Total/ : /^Break Total/,
+      });
+      expect(current).toHaveTextContent("00:00:00.0");
+      expect(total).toHaveTextContent("00:00:01.7");
+      act(() => vi.advanceTimersByTime(51));
+      expect(current).toHaveTextContent("00:00:00.1");
+      expect(current).toHaveAccessibleName(
+        `${state === "work" ? "Work" : "Break"} Session: 0 hours, 0 minutes, 0.1 seconds`,
+      );
+      expect(total).toHaveTextContent("00:00:01.8");
+      expect(screen.getByRole("table")).not.toHaveTextContent(
+        /\d{2}:\d{2}\.\d/,
+      );
+      act(() => vi.advanceTimersByTime(100));
+      expect(current).toHaveTextContent("00:00:00.2");
+      expect(total).toHaveTextContent("00:00:01.9");
+    },
+  );
 
   it("switches modes through the totals without restarting the active mode", async () => {
     const user = userEvent.setup();

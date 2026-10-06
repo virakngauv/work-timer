@@ -5,6 +5,7 @@ import {
   deriveSegments,
   editEventTimestamp,
   formatSessionDuration,
+  formatLiveDuration,
   formatTimeRange,
   type TimerEvent,
 } from "@/lib/timer";
@@ -21,6 +22,49 @@ describe("timer domain", () => {
   ])("formats a session lasting %i ms as %s", (ms, expected) => {
     expect(formatSessionDuration(ms)).toBe(expected);
   });
+
+  it.each([
+    [-100, "00:00:00.0"],
+    [99, "00:00:00.0"],
+    [100, "00:00:00.1"],
+    [59_999, "00:00:59.9"],
+    [60_000, "00:01:00.0"],
+    [3_600_100, "01:00:00.1"],
+    [360_000_900, "100:00:00.9"],
+  ])("formats a live duration of %i ms as %s", (ms, expected) => {
+    expect(formatLiveDuration(ms)).toBe(expected);
+  });
+
+  it.each(["work", "break"] as const)(
+    "keeps the current %s session and total synchronized at tenth boundaries",
+    (state) => {
+      const other = state === "work" ? "break" : "work";
+      const events: TimerEvent[] = [
+        { id: "first", state, at: 150 },
+        { id: "other", state: other, at: 1850 },
+        { id: "current", state, at: 2350 },
+      ];
+      const totalKey = state === "work" ? "workMs" : "breakMs";
+      const before = calculateTotals(events, 2399, 100);
+      const tick = calculateTotals(events, 2400, 100);
+      expect(before.currentMs).toBe(0);
+      expect(before[totalKey]).toBe(1700);
+      expect(tick.currentMs).toBe(100);
+      expect(tick[totalKey]).toBe(1800);
+      expect(calculateTotals(events, 2499, 100)).toEqual(tick);
+      expect(deriveSegments(events, 2499).at(-1)?.durationMs).toBe(0);
+      const stopped = [
+        ...events,
+        { id: "stop", state: "stopped" as const, at: 2450 },
+      ];
+      expect(calculateTotals(stopped, 9999, 100)).toEqual({
+        workMs: state === "work" ? 1800 : 500,
+        breakMs: state === "break" ? 1800 : 500,
+        currentMs: 0,
+        state: "stopped",
+      });
+    },
+  );
 
   it("derives work and break intervals from explicit state transitions", () => {
     const events: TimerEvent[] = [
