@@ -77,6 +77,7 @@ export function WorkTimer() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [clearEvents, setClearEvents] = useState<TimerEvent[] | null>(null);
+  const [clearSnapshotReady, setClearSnapshotReady] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
   const clearDialogRef = useRef<HTMLDialogElement>(null);
   const clearDialogOpenRef = useRef(false);
@@ -113,7 +114,8 @@ export function WorkTimer() {
   }
 
   async function clearTimers() {
-    if (!clearEvents) return;
+    if (!clearEvents || !clearSnapshotReady || !history.initialized || pending)
+      return;
     const error = await performAction({
       type: "clear",
       expectedEvents: clearEvents,
@@ -124,6 +126,12 @@ export function WorkTimer() {
 
   const displayedError = actionError ?? history.error;
   const hydrated = history.initialized;
+
+  // Freeze the first available history when the dialog opened during loading or saving.
+  if (clearEvents && !clearSnapshotReady && hydrated && !pending) {
+    setClearEvents([...events]);
+    setClearSnapshotReady(true);
+  }
 
   useEffect(() => {
     if (state === "stopped") return;
@@ -219,6 +227,7 @@ export function WorkTimer() {
           aria-haspopup="dialog"
           className="relative z-10 mr-6 flex min-h-11 min-w-11 translate-y-px cursor-pointer items-center justify-center self-end rounded-t-2xl border border-b-0 border-slate-200 bg-white/85 text-red-700 hover:bg-slate-50"
           onClick={() => {
+            setClearSnapshotReady(hydrated && !pending);
             setClearEvents([...events]);
             setClearError(null);
           }}
@@ -408,7 +417,7 @@ export function WorkTimer() {
             </Button>
             <Button
               variant="danger"
-              disabled={!hydrated || pending}
+              disabled={!hydrated || pending || !clearSnapshotReady}
               onClick={clearTimers}
             >
               Clear timers
