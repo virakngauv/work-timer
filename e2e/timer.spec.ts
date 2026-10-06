@@ -150,6 +150,53 @@ test("work to break flow creates editable history", async ({ page }) => {
   await expect(page.getByRole("button", { name: "-5 min" })).toBeVisible();
 });
 
+test("main timer switches modes with pointer and keyboard and persists boundaries", async ({
+  page,
+  browserName,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Total time", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Start Work", exact: true }).click();
+  const timer = page.getByRole("button", { name: /^Switch timer to/ });
+  await expect(timer.getByText("⇄", { exact: true })).toBeVisible();
+  await timer.click();
+  await expect(timer).toHaveAccessibleName("Switch timer to work");
+  await timer.focus();
+  await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+  await page.keyboard.press(
+    browserName === "webkit" ? "Alt+Shift+Tab" : "Shift+Tab",
+  );
+  await expect(timer).toBeFocused();
+  expect(
+    await timer.evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).toBe("solid");
+  await timer.press("Enter");
+  await expect(timer).toHaveAccessibleName("Switch timer to break");
+  await timer.press("Space");
+  await expect(timer).toHaveAccessibleName("Switch timer to work");
+  const history = await readIndexedHistory(page);
+  expect(history.events.map((event) => event.state)).toEqual([
+    "work",
+    "break",
+    "work",
+    "break",
+  ]);
+  for (let index = 1; index < history.events.length; index++) {
+    expect(history.events[index].at).toBeGreaterThan(
+      history.events[index - 1].at,
+    );
+  }
+  await page.reload();
+  await expect(page.getByText("Break Session")).toBeVisible();
+  expect(await readIndexedHistory(page)).toEqual(history);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Total time", exact: true }),
+  ).toBeDisabled();
+});
+
 test("balances session table columns at iPad width", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 1024 });
   await page.goto("/");

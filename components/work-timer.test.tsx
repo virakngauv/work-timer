@@ -58,6 +58,7 @@ vi.mock("@/lib/timer-store", () => ({
 }));
 
 import { WorkTimer } from "@/components/work-timer";
+import { dispatchTimer } from "@/lib/timer-store";
 
 afterEach(() => {
   cleanup();
@@ -112,6 +113,52 @@ describe("WorkTimer", () => {
     expect(screen.getByRole("timer")).toHaveAccessibleName(
       "Work Session: 0 hours, 0 minutes, 0 seconds",
     );
+  });
+
+  it("switches the main timer by click, Enter, and Space", async () => {
+    const user = userEvent.setup();
+    render(<WorkTimer />);
+    expect(screen.getByRole("button", { name: "Total time" })).toBeDisabled();
+    expect(screen.queryByText("⇄")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start Work" }));
+    const timer = screen.getByRole("button", { name: "Switch timer to break" });
+    expect(screen.getByText("⇄")).toHaveAttribute("aria-hidden", "true");
+    await user.click(timer);
+    expect(timer).toHaveAccessibleName("Switch timer to work");
+    timer.focus();
+    await user.keyboard("{Enter}");
+    expect(timer).toHaveAccessibleName("Switch timer to break");
+    await user.keyboard(" ");
+    expect(mockedStore.snapshot.events.map((event) => event.state)).toEqual([
+      "work",
+      "break",
+      "work",
+      "break",
+    ]);
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(timer).toBeDisabled();
+    expect(screen.queryByText("⇄")).not.toBeInTheDocument();
+  });
+
+  it("disables the main timer while a transition is pending", async () => {
+    const user = userEvent.setup();
+    mockedStore.snapshot.events = [
+      { id: "work", at: Date.now(), state: "work" },
+    ];
+    let complete!: () => void;
+    vi.mocked(dispatchTimer).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    render(<WorkTimer />);
+    const timer = screen.getByRole("button", { name: "Switch timer to break" });
+    await user.click(timer);
+    expect(timer).toBeDisabled();
+    expect(screen.getByText("⇄")).toBeVisible();
+    await act(async () => complete());
+    expect(timer).toBeEnabled();
   });
 
   it("preserves tenths in the stopped total without further accumulation", () => {
@@ -213,6 +260,7 @@ describe("WorkTimer", () => {
     expect(screen.getByRole("button", { name: "Start Break" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Work Total/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Break Total/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Total time" })).toBeDisabled();
   });
 
   it("surfaces a failed action without changing the visible mode", async () => {
