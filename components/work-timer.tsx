@@ -219,18 +219,8 @@ export function WorkTimer() {
         aria-label="Timer"
         className="rounded-3xl border border-slate-200 bg-white/85 p-[clamp(12px,3vw,24px)] shadow-xl shadow-slate-200/50 backdrop-blur"
       >
-        <button
-          type="button"
-          className={`relative block w-full min-w-0 rounded-2xl text-left enabled:cursor-pointer disabled:cursor-default ${state !== "stopped" ? "current-timer" : ""}`}
-          aria-label={
-            state === "stopped"
-              ? "Total time"
-              : state === "work"
-                ? "Switch timer to break"
-                : "Switch timer to work"
-          }
-          disabled={!hydrated || pending || state === "stopped"}
-          onClick={toggleMode}
+        <div
+          className={`relative ${state !== "stopped" ? "current-timer" : ""}`}
         >
           <MetricCard
             label={currentLabel}
@@ -239,15 +229,29 @@ export function WorkTimer() {
             active={state !== "stopped"}
             tone={state === "break" ? "break" : "work"}
           />
-          {state !== "stopped" ? (
-            <span
-              aria-hidden="true"
-              className="absolute right-4 bottom-2 text-2xl leading-none text-white"
-            >
-              ⇄
-            </span>
-          ) : null}
-        </button>
+          <button
+            type="button"
+            className="absolute inset-0 w-full rounded-2xl enabled:cursor-pointer disabled:cursor-default"
+            aria-label={
+              state === "stopped"
+                ? "Total time"
+                : state === "work"
+                  ? "Switch timer to break"
+                  : "Switch timer to work"
+            }
+            disabled={!hydrated || pending || state === "stopped"}
+            onClick={toggleMode}
+          >
+            {state !== "stopped" ? (
+              <span
+                aria-hidden="true"
+                className="absolute right-4 bottom-2 text-2xl leading-none text-white"
+              >
+                ⇄
+              </span>
+            ) : null}
+          </button>
+        </div>
 
         <div className="totals-grid">
           <button

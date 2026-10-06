@@ -122,6 +122,7 @@ describe("WorkTimer", () => {
     expect(screen.queryByText("⇄")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start Work" }));
     const timer = screen.getByRole("button", { name: "Switch timer to break" });
+    expect(timer).not.toContainElement(screen.getByRole("timer"));
     expect(screen.getByText("⇄")).toHaveAttribute("aria-hidden", "true");
     await user.click(timer);
     expect(timer).toHaveAccessibleName("Switch timer to work");
