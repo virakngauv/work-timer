@@ -72,10 +72,6 @@ section[tabindex="-1"]:focus {
   padding: clamp(14px, 3vw, 24px);
 }
 
-.current-timer .current-metric {
-  padding-bottom: calc(clamp(14px, 3vw, 24px) + 20px);
-}
-
 .total-metric {
   padding: 12px clamp(12px, 2vw, 18px);
 }

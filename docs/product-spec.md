@@ -50,7 +50,7 @@ Back to Work creates a `work` event at the current timestamp.
 
 ### Stop
 
-Stop creates a `stopped` event. No timer continues after it. History displays a timestamped stop separator. Clear timers is available while stopped and removes all history and totals only after explicit warning confirmation.
+Stop creates a `stopped` event. No timer continues after it. History displays a timestamped stop separator. Clear timers is available in every mode and stops any running timer and removes all history and totals only after explicit warning confirmation.
 
 Work or break can be resumed at any later time by appending the corresponding event. History and totals persist across dates without automatic filtering or resets.
 

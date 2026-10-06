@@ -209,8 +209,34 @@ export function WorkTimer() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl p-[clamp(12px,3vw,24px)]">
-      <header className="mb-3">
+      <header className="flex h-12 items-center justify-between">
         <h1 className="text-xs font-semibold text-slate-500">Work Timer</h1>
+        <button
+          ref={clearTriggerRef}
+          type="button"
+          aria-label="Clear timers"
+          title="Clear timers"
+          aria-haspopup="dialog"
+          className="relative z-10 mr-6 flex min-h-11 min-w-11 translate-y-px cursor-pointer items-center justify-center self-end rounded-t-2xl border border-b-0 border-slate-200 bg-white/85 text-red-700 hover:bg-slate-50"
+          onClick={() => {
+            setClearEvents([...events]);
+            setClearError(null);
+          }}
+        >
+          <svg
+            aria-hidden="true"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7" />
+          </svg>
+        </button>
       </header>
 
       <section
@@ -219,9 +245,7 @@ export function WorkTimer() {
         aria-label="Timer"
         className="rounded-3xl border border-slate-200 bg-white/85 p-[clamp(12px,3vw,24px)] shadow-xl shadow-slate-200/50 backdrop-blur"
       >
-        <div
-          className={`relative ${state !== "stopped" ? "current-timer" : ""}`}
-        >
+        <div className="relative">
           <MetricCard
             label={currentLabel}
             prominent
@@ -245,7 +269,7 @@ export function WorkTimer() {
             {state !== "stopped" ? (
               <span
                 aria-hidden="true"
-                className="absolute right-4 bottom-2 text-2xl leading-none text-white"
+                className="absolute right-4 top-3 text-2xl leading-none text-white"
               >
                 ⇄
               </span>
@@ -329,23 +353,6 @@ export function WorkTimer() {
           )}
         </div>
 
-        {state === "stopped" && events.length > 0 ? (
-          <div className="mt-2 flex justify-end">
-            <Button
-              ref={clearTriggerRef}
-              variant="ghost"
-              aria-haspopup="dialog"
-              disabled={!hydrated || pending}
-              onClick={() => {
-                setClearEvents([...events]);
-                setClearError(null);
-              }}
-            >
-              Clear timers
-            </Button>
-          </div>
-        ) : null}
-
         {displayedError ? (
           <p role="alert" className="mt-2 text-sm font-medium text-red-600">
             {displayedError}
@@ -382,8 +389,8 @@ export function WorkTimer() {
             Clear all timers?
           </h2>
           <p id="clear-dialog-description" className="text-sm text-slate-600">
-            This deletes all session history and resets Work and Break totals to
-            zero. This cannot be undone.
+            This stops any running timer, deletes all session history, and
+            resets Work and Break totals to zero. This cannot be undone.
           </p>
           {clearError ? (
             <p role="alert" className="text-sm font-medium text-red-700">
@@ -399,7 +406,11 @@ export function WorkTimer() {
             >
               Cancel
             </Button>
-            <Button variant="danger" disabled={pending} onClick={clearTimers}>
+            <Button
+              variant="danger"
+              disabled={!hydrated || pending}
+              onClick={clearTimers}
+            >
               Clear timers
             </Button>
           </div>
